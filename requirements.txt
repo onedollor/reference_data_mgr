@@ -1,0 +1,12 @@
+openai
+pydantic
+asyncio
+uvicorn
+typing
+dataclasses
+pyodbc
+sqlalchemy
+pydantic-settings
+pydantic-core
+pydantic-settings
+emoji
