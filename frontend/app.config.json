@@ -1,0 +1,204 @@
+{
+  "app": {
+    "name": "CSV数据管理系统",
+    "version": "1.0.0",
+    "description": "企业级CSV数据导入、验证和管理系统",
+    "author": "AI协作团队"
+  },
+  "features": {
+    "configManagement": {
+      "enabled": true,
+      "title": "配置管理",
+      "description": "管理CSV导入配置和验证规则",
+      "route": "/configs",
+      "permissions": ["config.read", "config.write"]
+    },
+    "fileUpload": {
+      "enabled": true,
+      "title": "文件上传",
+      "description": "CSV文件上传和数据导入",
+      "route": "/upload",
+      "permissions": ["file.upload", "file.import"],
+      "maxFileSize": 104857600,
+      "allowedTypes": [".csv"],
+      "fileNamePattern": "^.+\\.\\d{14}\\.csv$"
+    },
+    "userManagement": {
+      "enabled": true,
+      "title": "用户管理",
+      "description": "用户账户和权限管理",
+      "route": "/users",
+      "permissions": ["user.read", "user.write", "group.manage"]
+    },
+    "logViewer": {
+      "enabled": true,
+      "title": "日志浏览",
+      "description": "系统日志和验证记录查看",
+      "route": "/logs",
+      "permissions": ["log.read", "log.export"]
+    },
+    "dataVisualization": {
+      "enabled": true,
+      "title": "数据统计",
+      "description": "导入统计和趋势分析",
+      "route": "/dashboard",
+      "permissions": ["report.read"]
+    }
+  },
+  "ui": {
+    "theme": {
+      "primaryColor": "#2563eb",
+      "successColor": "#059669",
+      "warningColor": "#d97706",
+      "errorColor": "#dc2626",
+      "backgroundColor": "#f8fafc",
+      "borderRadius": 4,
+      "fontSize": 14
+    },
+    "layout": {
+      "siderWidth": 240,
+      "siderCollapsedWidth": 64,
+      "headerHeight": 64,
+      "menuTheme": "light"
+    },
+    "table": {
+      "defaultPageSize": 10,
+      "pageSizeOptions": ["10", "20", "50", "100"],
+      "showSizeChanger": true,
+      "showQuickJumper": true
+    },
+    "upload": {
+      "dragDrop": true,
+      "multiple": true,
+      "showUploadList": true,
+      "maxCount": 10
+    }
+  },
+  "api": {
+    "baseURL": "http://localhost:8000",
+    "basePath": "/api",
+    "timeout": 30000,
+    "endpoints": {
+      "auth": {
+        "login": "/auth/login",
+        "logout": "/auth/logout",
+        "profile": "/auth/profile"
+      },
+      "configs": {
+        "list": "/configs",
+        "create": "/configs",
+        "update": "/configs/{id}",
+        "delete": "/configs/{id}"
+      },
+      "files": {
+        "upload": "/files/upload",
+        "import": "/files/import",
+        "status": "/files/status/{id}"
+      },
+      "users": {
+        "list": "/users",
+        "create": "/users",
+        "update": "/users/{id}",
+        "delete": "/users/{id}",
+        "groups": "/user-groups"
+      },
+      "logs": {
+        "list": "/logs",
+        "export": "/logs/export"
+      },
+      "reports": {
+        "dashboard": "/reports/dashboard",
+        "statistics": "/reports/statistics"
+      }
+    }
+  },
+  "validation": {
+    "csvFile": {
+      "namePattern": "^.+\\.\\d{14}\\.csv$",
+      "namePatternDescription": "文件名格式：文件名.yyyyMMddHHmmss.csv",
+      "maxSize": 104857600,
+      "encoding": ["utf-8", "gbk"],
+      "requiredHeaders": false
+    },
+    "dataImport": {
+      "allColumnsAsString": true,
+      "supportStageTable": true,
+      "requireValidation": true,
+      "maxValidationErrors": 1000
+    }
+  },
+  "business": {
+    "dataFlow": {
+      "stages": [
+        {
+          "name": "上传",
+          "description": "CSV文件上传到系统"
+        },
+        {
+          "name": "Stage表",
+          "description": "数据导入到临时表"
+        },
+        {
+          "name": "验证",
+          "description": "运行验证规则"
+        },
+        {
+          "name": "正式表",
+          "description": "验证通过的数据导入正式表"
+        },
+        {
+          "name": "报表",
+          "description": "数据可视化和统计"
+        }
+      ]
+    },
+    "userRoles": [
+      {
+        "name": "数据管理员",
+        "description": "配置文件导入规则和验证逻辑",
+        "permissions": ["config.*", "file.*", "log.read"]
+      },
+      {
+        "name": "业务用户",
+        "description": "查看数据和报表",
+        "permissions": ["log.read", "report.*"]
+      },
+      {
+        "name": "系统管理员",
+        "description": "管理用户权限和系统配置",
+        "permissions": ["*"]
+      }
+    ],
+    "validationTypes": [
+      {
+        "type": "stored_procedure",
+        "name": "存储过程",
+        "description": "使用SQL Server存储过程进行数据验证"
+      },
+      {
+        "type": "python_class",
+        "name": "Python类",
+        "description": "使用Python类进行数据验证"
+      }
+    ]
+  },
+  "performance": {
+    "pagination": {
+      "defaultSize": 10,
+      "maxSize": 100
+    },
+    "upload": {
+      "chunkSize": 1048576,
+      "maxConcurrent": 3
+    },
+    "polling": {
+      "interval": 2000,
+      "maxRetries": 30
+    }
+  },
+  "monitoring": {
+    "enableAnalytics": false,
+    "enableErrorTracking": true,
+    "enablePerformanceMonitoring": true
+  }
+}
