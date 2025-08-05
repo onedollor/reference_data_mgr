@@ -1,0 +1,127 @@
+// Layout样式
+.layout-container {
+  height: 100vh;
+  
+  .layout-sider {
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.06);
+    position: relative;
+    z-index: 10;
+    
+    .layout-logo {
+      height: 64px;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid #f0f0f0;
+      
+      .logo-icon {
+        font-size: 24px;
+        color: #2563eb;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+      }
+      
+      .logo-text {
+        margin-left: 12px;
+        
+        .ant-typography {
+          color: #2563eb;
+          font-size: 16px;
+          margin: 0;
+        }
+      }
+    }
+    
+    .layout-menu {
+      border-right: none;
+      
+      .ant-menu-item {
+        margin: 4px 8px;
+        border-radius: 6px;
+        
+        &.ant-menu-item-selected {
+          background-color: #e0f2fe !important;
+          color: #2563eb;
+          
+          .anticon {
+            color: #2563eb;
+          }
+        }
+        
+        &:hover {
+          background-color: #f5f5f5;
+        }
+      }
+    }
+  }
+  
+  .layout-main {
+    .layout-header {
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+      position: relative;
+      z-index: 9;
+      
+      .header-left {
+        .collapse-button {
+          width: 40px;
+          height: 40px;
+          font-size: 16px;
+          
+          &:hover {
+            background-color: #f5f5f5;
+          }
+        }
+      }
+      
+      .header-right {
+        .user-info {
+          padding: 8px 12px;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: background-color 0.2s;
+          
+          &:hover {
+            background-color: #f5f5f5;
+          }
+          
+          .ant-avatar {
+            background-color: #2563eb;
+          }
+        }
+      }
+    }
+    
+    .layout-content {
+      background-color: #f5f5f5;
+      overflow: auto;
+      
+      .content-wrapper {
+        min-height: 100%;
+        background-color: transparent;
+      }
+    }
+  }
+}
+
+// 响应式设计
+@media (max-width: 768px) {
+  .layout-container {
+    .layout-sider {
+      position: fixed !important;
+      left: 0;
+      height: 100vh;
+      z-index: 1001;
+    }
+    
+    .layout-main {
+      margin-left: 0 !important;
+    }
+  }
+}

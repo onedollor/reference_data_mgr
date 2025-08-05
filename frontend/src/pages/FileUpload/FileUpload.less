@@ -1,0 +1,48 @@
+.file-upload-page {
+  padding: 24px;
+  
+  .page-header {
+    margin-bottom: 24px;
+  }
+
+  .upload-card {
+    margin-bottom: 24px;
+    
+    .upload-area {
+      padding: 40px;
+      border: 2px dashed #d9d9d9;
+      border-radius: 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.3s;
+      
+      &:hover {
+        border-color: #1890ff;
+      }
+      
+      &.drag-active {
+        border-color: #1890ff;
+        background-color: #f0f8ff;
+      }
+      
+      .upload-content {
+        .upload-icon {
+          font-size: 48px;
+          color: #1890ff;
+          margin-bottom: 16px;
+        }
+      }
+    }
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px;
+    
+    .empty-icon {
+      font-size: 48px;
+      color: #d9d9d9;
+      margin-bottom: 16px;
+    }
+  }
+}
