@@ -39,3 +39,6 @@ C:\\data\\reference_data\\temp/
 
 # CSV test outputs
 *.csv
+
+# fmt file
+*.fmt
