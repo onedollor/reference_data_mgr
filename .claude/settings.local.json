@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(sudo apt install:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(./start_dev.sh:*)",
+      "Bash(./install.sh)",
+      "Bash(docker run:*)",
+      "Bash(python test:*)",
+      "Bash(grep:*)",
+      "Bash(curl:*)",
+      "Bash(rm:*)",
+      "Bash(PYTHONPATH=backend python3 check_backup_table.py)",
+      "Bash(export PYTHONPATH=backend)",
+      "Bash(cp:*)",
+      "Bash(PYTHONPATH=backend python3 check_test_data_backup.py)",
+      "Bash(find:*)",
+      "Bash(true)",
+      "Bash(python:*)",
+      "Bash(./shutdown_server.sh)",
+      "Bash(DEMO_SLOW_PROGRESS=1 ./start_dev.sh)",
+      "Bash(for i in {1..15})",
+      "Bash(do echo \"=== Check $i ===\")",
+      "Bash(echo)",
+      "Bash(done)",
+      "Bash(awk:*)",
+      "Bash(gh repo list:*)",
+      "Bash(sudo apt:*)",
+      "Bash(sudo rm:*)",
+      "Bash(sudo snap install:*)",
+      "Bash(gh auth:*)",
+      "Bash(gh:*)"
+    ],
+    "deny": []
+  }
+}

@@ -1,0 +1,406 @@
+"""
+Reference Data Auto Ingest System - FastAPI Backend
+Main application entry point
+"""
+
+import os
+import re
+import sys
+
+# Ensure backend root (containing 'utils') is on sys.path when running from repo root
+_CURRENT_DIR = os.path.dirname(__file__)
+_BACKEND_ROOT = os.path.abspath(os.path.join(_CURRENT_DIR, '..'))
+if _BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, _BACKEND_ROOT)
+import traceback
+from typing import Optional, Dict, Any
+from datetime import datetime
+import json
+
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, JSONResponse
+import uvicorn
+from dotenv import load_dotenv
+
+from utils.database import DatabaseManager
+from utils.file_handler import FileHandler
+from utils.logger import Logger, DatabaseLogger
+from utils.csv_detector import CSVFormatDetector
+from utils import progress as prog
+
+# Load environment variables
+load_dotenv()
+
+app = FastAPI(
+    title="Reference Data Auto Ingest System",
+    description="Automated reference data ingestion from CSV files to SQL Server",
+    version="1.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # React default port
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Specific methods only
+    allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],  # Specific headers only
+)
+
+# Initialize components
+db_manager = DatabaseManager()
+file_handler = FileHandler()
+logger = DatabaseLogger(db_manager)
+
+# Ensure schemas on startup
+@app.on_event("startup")
+async def startup_init():
+    try:
+        conn = db_manager.get_connection()
+        db_manager.ensure_schemas_exist(conn)
+        conn.close()
+    except Exception as e:
+        # Log but don't crash app
+        try:
+            await logger.log_error("startup", f"Schema init failed: {e}")
+        except Exception:
+            print(f"Startup schema init failed: {e}")
+
+@app.get("/")
+async def root():
+    """Root endpoint for health check"""
+    return {
+        "message": "Reference Data Auto Ingest System is running",
+        "version": "1.0.0",
+        "status": "healthy"
+    }
+
+@app.get("/config")
+async def get_config():
+    """Get system configuration"""
+    try:
+        config = {
+            "max_upload_size": int(os.getenv("max_upload_size", "20971520")),
+            "supported_formats": ["csv"],
+            "default_delimiters": {
+                "header_delimiter": "|",
+                "column_delimiter": "|", 
+                "row_delimiter": '|""\r\n',
+                "text_qualifier": '"'
+            },
+            "delimiter_options": {
+                "header_delimiter": [",", ";", "|"],
+                "column_delimiter": [",", ";", "|"],
+                "row_delimiter": ["\r", "\n", "\r\n", '|""\r\n'],
+                "text_qualifier": ['"', "'", '""']
+            }
+        }
+        return config
+    except Exception as e:
+        await logger.log_error("get_config", str(e), traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Configuration error: {str(e)}")
+
+@app.post("/detect-format")
+async def detect_csv_format(file: UploadFile = File(...)):
+    """
+    Auto-detect CSV format parameters from uploaded file
+    Returns suggested format settings
+    """
+    try:
+        # Initialize detector
+        detector = CSVFormatDetector()
+        
+        # Save temporary file for analysis
+        temp_location = os.getenv("temp_location", "temp")
+        temp_path = os.path.join(temp_location, f"detect_{file.filename}")
+        
+        # Write uploaded file to temp location
+        with open(temp_path, "wb") as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+        
+        # Reset file position for potential future reads
+        await file.seek(0)
+        
+        # Detect format
+        detection_result = detector.detect_format(temp_path)
+        
+        # Clean up temp file
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        
+        # Log detection attempt
+        await logger.log_info(
+            "csv_format_detection",
+            f"Format detection completed for {file.filename}. Confidence: {detection_result.get('detection_confidence', 0):.2f}"
+        )
+        
+        # Prepare response
+        response = {
+            "filename": file.filename,
+            "file_size": len(content),
+            "detected_format": {
+                "header_delimiter": detection_result.get("header_delimiter", ","),
+                "column_delimiter": detection_result.get("column_delimiter", ","),
+                "row_delimiter": detection_result.get("row_delimiter", "\n"),
+                "text_qualifier": detection_result.get("text_qualifier", '"'),
+                "has_header": detection_result.get("has_header", True),
+                "has_trailer": detection_result.get("has_trailer", False),
+                "skip_lines": detection_result.get("skip_lines", 0),
+                "trailer_line": detection_result.get("trailer_line")
+            },
+            "confidence": detection_result.get("detection_confidence", 0.0),
+            "analysis": {
+                "encoding": detection_result.get("encoding", "utf-8"),
+                "estimated_columns": detection_result.get("estimated_columns", 0),
+                "sample_rows": detection_result.get("sample_rows", 0),
+                "trailer_format": detection_result.get("trailer_format"),
+                "sample_data": detection_result.get("sample_data", [])[:3]  # First 3 rows
+            },
+            "error": detection_result.get("error")
+        }
+        
+        return response
+        
+    except Exception as e:
+        error_msg = f"Format detection failed: {str(e)}"
+        await logger.log_error("detect_csv_format", error_msg, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=error_msg)
+
+@app.post("/upload")
+async def upload_file(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    header_delimiter: str = Form("|"),
+    column_delimiter: str = Form("|"),
+    row_delimiter: str = Form('|""\r\n'),
+    text_qualifier: str = Form('"'),
+    skip_lines: int = Form(0),
+    trailer_line: Optional[str] = Form(None),
+    load_mode: str = Form("full")  # full or append
+):
+    """Upload and process CSV file"""
+    try:
+        # Validate file type
+        if not file.filename.lower().endswith('.csv'):
+            raise HTTPException(status_code=400, detail="Only CSV files are supported")
+        
+        # Validate file size
+        max_size = int(os.getenv("max_upload_size", "20971520"))  # 20MB default
+        file_content = await file.read()
+        if len(file_content) > max_size:
+            raise HTTPException(
+                status_code=413, 
+                detail=f"File size exceeds maximum limit of {max_size} bytes"
+            )
+        
+        # Reset file pointer
+        await file.seek(0)
+        
+        # Save file and create format file
+        temp_file_path, fmt_file_path = await file_handler.save_uploaded_file(
+            file, header_delimiter, column_delimiter, row_delimiter, 
+            text_qualifier, skip_lines, trailer_line
+        )
+        
+        # Start background ingestion process
+        background_tasks.add_task(
+            ingest_data_background,
+            temp_file_path,
+            fmt_file_path,
+            load_mode,
+            file.filename
+        )
+        
+        return {
+            "message": "File uploaded successfully",
+            "filename": file.filename,
+            "file_size": len(file_content),
+            "status": "processing",
+            "progress_key": re.sub(r'[^a-zA-Z0-9_]', '_', file.filename)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await logger.log_error("upload_file", str(e), traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+@app.post("/ingest/{filename}")
+async def trigger_ingestion(
+    filename: str,
+    load_mode: str = "full"
+):
+    """Trigger data ingestion for a specific file"""
+    try:
+        temp_file_path = os.path.join(os.getenv("temp_location"), filename)
+        fmt_file_path = os.path.join(os.getenv("format_location"), filename.replace('.csv', '.fmt'))
+        
+        if not os.path.exists(temp_file_path):
+            raise HTTPException(status_code=404, detail="File not found in temp location")
+        
+        if not os.path.exists(fmt_file_path):
+            raise HTTPException(status_code=404, detail="Format file not found")
+        
+        # Process ingestion with progress streaming
+        return StreamingResponse(
+            ingest_data_stream(temp_file_path, fmt_file_path, load_mode, filename),
+            media_type="text/plain"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await logger.log_error("trigger_ingestion", str(e), traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+
+@app.get("/ingest/{filename}")
+async def ingest_usage(filename: str):
+    """Helper GET endpoint to avoid Method Not Allowed confusion.
+    Returns instructions for triggering ingestion via POST or checking prerequisites.
+    """
+    temp_file_path = os.path.join(os.getenv("temp_location"), filename)
+    fmt_file_path = os.path.join(os.getenv("format_location"), filename.replace('.csv', '.fmt'))
+    return {
+        "message": "Use POST /ingest/{filename} to start streaming ingestion output.",
+        "filename": filename,
+        "file_present": os.path.exists(temp_file_path),
+        "format_present": os.path.exists(fmt_file_path),
+        "next_steps": [
+            "Upload the file first via POST /upload (multipart form field 'file')",
+            "Then call: curl -N -X POST http://host:8000/ingest/yourfile.csv",
+            "Optionally include load_mode query param: ?load_mode=append"
+        ],
+        "example_curl_upload": "curl -F file=@test.csv -F load_mode=full http://localhost:8000/upload",
+        "example_curl_ingest_stream": f"curl -N -X POST http://localhost:8000/ingest/{filename}",
+        "dry_run": os.getenv("INGEST_DRY_RUN", "0"),
+    }
+
+@app.get("/schema/{table_name}")
+async def get_table_schema(table_name: str):
+    try:
+        conn = db_manager.get_connection()
+        if not db_manager.table_exists(conn, table_name):
+            return {"table": table_name, "exists": False}
+        cols = db_manager.get_table_columns(conn, table_name)
+        return {"table": table_name, "exists": True, "columns": cols}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        try:
+            conn.close()
+        except:
+            pass
+
+@app.get("/schema/inferred/{fmt_filename}")
+async def get_inferred_schema(fmt_filename: str):
+    # Expect a .fmt file name (or base without ext)
+    try:
+        if not fmt_filename.endswith('.fmt'):
+            # Allow base name; resolve latest matching
+            base = fmt_filename
+        else:
+            base = fmt_filename[:-4]
+        fmt_dir = os.getenv("format_location", "C:\\data\\reference_data\\format")
+        # Find latest matching format file for base
+        candidates = [f for f in os.listdir(fmt_dir) if f.endswith('.fmt') and base in f]
+        if not candidates:
+            return {"inferred_schema": None, "message": "No matching format file"}
+        # Pick newest by modified time
+        candidates_full = [os.path.join(fmt_dir, f) for f in candidates]
+        newest = max(candidates_full, key=lambda p: os.path.getmtime(p))
+        import json
+        with open(newest, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return {"fmt_file": os.path.basename(newest), "inferred_schema": data.get('inferred_schema')}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/db/pool-stats")
+async def pool_stats():
+    try:
+        return db_manager.get_pool_stats()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/features")
+async def feature_flags():
+    return {
+        "type_inference": os.getenv("INGEST_TYPE_INFERENCE", "0"),
+        "chunk_size": os.getenv("INGEST_CHUNK_SIZE", "0"),
+        "batch_size": os.getenv("INGEST_BATCH_SIZE", "0"),
+        "append_mode_schema_sync": True,
+        "pooling": True,
+        "dry_run": os.getenv("INGEST_DRY_RUN", "0"),
+        "stream_commit_rows": os.getenv("INGEST_STREAM_COMMIT_ROWS", "50000"),
+        "bulk_insert": os.getenv("INGEST_BULK_INSERT", "0"),
+        "bulk_min_rows": os.getenv("INGEST_BULK_MIN_ROWS", "50000")
+    }
+
+async def ingest_data_background(
+    file_path: str, 
+    fmt_file_path: str, 
+    load_mode: str, 
+    filename: str
+):
+    """Background task for data ingestion"""
+    try:
+        from utils.ingest import DataIngester
+        ingester = DataIngester(db_manager, logger)
+        
+        async for progress in ingester.ingest_data(file_path, fmt_file_path, load_mode, filename):
+            await logger.log_info("background_ingestion", f"Progress: {progress}")
+            
+    except Exception as e:
+        await logger.log_error("ingest_data_background", str(e), traceback.format_exc())
+
+async def ingest_data_stream(
+    file_path: str, 
+    fmt_file_path: str, 
+    load_mode: str, 
+    filename: str
+):
+    """Stream ingestion progress to client"""
+    try:
+        from utils.ingest import DataIngester
+        ingester = DataIngester(db_manager, logger)
+        
+        async for progress in ingester.ingest_data(file_path, fmt_file_path, load_mode, filename):
+            yield f"data: {progress}\n\n"
+            
+    except Exception as e:
+        error_msg = f"ERROR! Ingestion failed: {str(e)}\n{traceback.format_exc()}"
+        await logger.log_error("ingest_data_stream", str(e), traceback.format_exc())
+        yield f"data: {error_msg}\n\n"
+
+@app.get("/logs")
+async def get_logs(limit: int = 100):
+    """Get recent log entries (no-cache)."""
+    try:
+        logs = await logger.get_logs(limit)
+        return JSONResponse(
+            content={"logs": logs},
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
+    except Exception as e:
+        await logger.log_error("get_logs", str(e), traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve logs: {str(e)}")
+
+@app.get("/progress/{key}")
+async def get_progress(key: str):
+    """Return ingestion progress for given key (sanitized filename)."""
+    return prog.get_progress(key)
+
+@app.post("/progress/{key}/cancel")
+async def cancel_ingestion(key: str):
+    """Request cancellation of an in-flight ingestion."""
+    await logger.log_info("cancel_request", f"Cancellation requested for progress key: {key}")
+    prog.request_cancel(key)
+    return {"message": "cancel requested", "key": key}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

@@ -1,0 +1,24 @@
+{
+  "file_info": {
+    "original_filename": "test_eof_trailer.csv",
+    "upload_timestamp": "2025-08-09T17:37:19.346967",
+    "format_version": "1.0"
+  },
+  "csv_format": {
+    "header_delimiter": "|",
+    "column_delimiter": "|",
+    "row_delimiter": "|\"\"\r\n",
+    "text_qualifier": "\"",
+    "skip_lines": 0,
+    "has_header": true,
+    "trailer_pattern": null
+  },
+  "processing_options": {
+    "encoding": "utf-8",
+    "skip_blank_lines": true,
+    "strip_whitespace": true
+  },
+  "inferred_schema": {
+    "id_name_description": "varchar(100)"
+  }
+}

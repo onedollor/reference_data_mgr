@@ -1,0 +1,41 @@
+{
+  "file_info": {
+    "original_filename": "airports.csv",
+    "upload_timestamp": "2025-08-09T18:11:27.112956",
+    "format_version": "1.0"
+  },
+  "csv_format": {
+    "header_delimiter": ",",
+    "column_delimiter": ",",
+    "row_delimiter": "\r\n",
+    "text_qualifier": "\"",
+    "skip_lines": 0,
+    "has_header": true,
+    "trailer_line": null
+  },
+  "processing_options": {
+    "encoding": "utf-8",
+    "skip_blank_lines": true,
+    "strip_whitespace": true
+  },
+  "inferred_schema": {
+    "id": "int",
+    "ident": "varchar(1024)",
+    "type": "varchar(1024)",
+    "name": "varchar(2048)",
+    "latitude_deg": "decimal(18,15)",
+    "longitude_deg": "decimal(19,14)",
+    "elevation_ft": "int",
+    "continent": "varchar(1024)",
+    "iso_country": "varchar(1024)",
+    "iso_region": "varchar(1024)",
+    "municipality": "varchar(1024)",
+    "scheduled_service": "varchar(1024)",
+    "gps_code": "varchar(1024)",
+    "iata_code": "varchar(1024)",
+    "local_code": "varchar(1024)",
+    "home_link": "varchar(2048)",
+    "wikipedia_link": "varchar(2048)",
+    "keywords": "varchar(2048)"
+  }
+}

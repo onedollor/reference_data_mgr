@@ -1,0 +1,28 @@
+{
+  "file_info": {
+    "original_filename": "medium_progress_test.csv",
+    "upload_timestamp": "2025-08-09T17:29:01.549367",
+    "format_version": "1.0"
+  },
+  "csv_format": {
+    "header_delimiter": "|",
+    "column_delimiter": "|",
+    "row_delimiter": "|\"\"\r\n",
+    "text_qualifier": "\"",
+    "skip_lines": 0,
+    "has_header": true,
+    "trailer_pattern": null
+  },
+  "processing_options": {
+    "encoding": "utf-8",
+    "skip_blank_lines": true,
+    "strip_whitespace": true
+  },
+  "inferred_schema": {
+    "id": "int",
+    "name": "varchar(100)",
+    "description": "varchar(100)",
+    "category": "varchar(100)",
+    "value": "decimal(7,1)"
+  }
+}

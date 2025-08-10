@@ -1,0 +1,29 @@
+{
+  "file_info": {
+    "original_filename": "airport-frequencies.csv",
+    "upload_timestamp": "2025-08-09T13:08:47.755292",
+    "format_version": "1.0"
+  },
+  "csv_format": {
+    "header_delimiter": ",",
+    "column_delimiter": ",",
+    "row_delimiter": "\r\n",
+    "text_qualifier": "\"",
+    "skip_lines": 0,
+    "has_header": true,
+    "trailer_pattern": null
+  },
+  "processing_options": {
+    "encoding": "utf-8",
+    "skip_blank_lines": true,
+    "strip_whitespace": true
+  },
+  "inferred_schema": {
+    "id": "int",
+    "airport_ref": "int",
+    "airport_ident": "varchar(100)",
+    "type": "varchar(100)",
+    "description": "varchar(200)",
+    "frequency_mhz": "decimal(7,3)"
+  }
+}

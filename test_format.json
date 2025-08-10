@@ -1,0 +1,8 @@
+{
+  "csv_format": {
+    "column_delimiter": ",",
+    "text_qualifier": "\"",
+    "row_delimiter": "\n",
+    "skip_lines": 0
+  }
+}
