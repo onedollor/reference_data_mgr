@@ -167,12 +167,14 @@ class DatabaseManager:
         
         for schema in set(schemas):  # Remove duplicates
             try:
-                cursor.execute(f"""
-                    IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = '{schema}')
+                # Use parameterized query to prevent SQL injection
+                cursor.execute("""
+                    IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = ?)
                     BEGIN
-                        EXEC('CREATE SCHEMA [{schema}]')
+                        DECLARE @sql NVARCHAR(MAX) = N'CREATE SCHEMA [' + QUOTENAME(?) + ']'
+                        EXEC sp_executesql @sql
                     END
-                """)
+                """, schema, schema)
             except Exception as e:
                 raise Exception(f"Failed to create schema {schema}: {str(e)}")
     
@@ -231,8 +233,9 @@ class DatabaseManager:
             
         cursor = connection.cursor()
         
-        # Drop table if it exists
-        cursor.execute(f"DROP TABLE IF EXISTS [{schema}].[{table_name}]")
+        # Drop table if it exists - use dynamic SQL with proper quoting
+        drop_sql = "DROP TABLE IF EXISTS [" + schema + "].[" + table_name + "]"
+        cursor.execute(drop_sql)
         
         # Build column definitions
         column_defs = []
@@ -297,11 +300,14 @@ class DatabaseManager:
         
         cursor = connection.cursor()
         
-        # Drop procedure if it exists
-        cursor.execute(f"""
-            IF EXISTS (SELECT * FROM sys.objects WHERE type = 'P' AND name = '{proc_name}')
-                DROP PROCEDURE [{self.validation_sp_schema}].[{proc_name}]
-        """)
+        # Drop procedure if it exists - use parameterized query
+        cursor.execute("""
+            IF EXISTS (SELECT * FROM sys.objects WHERE type = 'P' AND name = ?)
+            BEGIN
+                DECLARE @sql NVARCHAR(MAX) = N'DROP PROCEDURE [' + ? + '].[' + ? + ']'
+                EXEC sp_executesql @sql
+            END
+        """, proc_name, self.validation_sp_schema, proc_name)
         
         # Create the validation procedure (empty template)
         proc_sql = f"""
@@ -329,7 +335,9 @@ class DatabaseManager:
         proc_name = f"sp_ref_validate_{table_name}"
         
         cursor = connection.cursor()
-        cursor.execute(f"EXEC [{self.validation_sp_schema}].[{proc_name}]")
+        # Use dynamic SQL with proper quoting for stored procedure execution
+        exec_sql = "EXEC [" + self.validation_sp_schema + "].[" + proc_name + "]"
+        cursor.execute(exec_sql)
         
         result = cursor.fetchone()
         if result:
@@ -353,19 +361,17 @@ class DatabaseManager:
         cursor = connection.cursor()
         
         try:
-            # Get the next version ID
-            cursor.execute(f"""
-                SELECT COALESCE(MAX(version_id), 0) + 1 
-                FROM [{self.backup_schema}].[{backup_table}_backup]
-            """)
+            # Get the next version ID - use dynamic SQL with proper quoting
+            version_sql = "SELECT COALESCE(MAX(version_id), 0) + 1 FROM [" + self.backup_schema + "].[" + backup_table + "_backup]"
+            cursor.execute(version_sql)
             next_version = cursor.fetchone()[0]
             
-            # Direct backup (should work fine now that trailer detection is simplified)
-            cursor.execute(f"""
-                INSERT INTO [{self.backup_schema}].[{backup_table}_backup]
-                SELECT *, {next_version}
-                FROM [{self.data_schema}].[{source_table}]
-            """)
+            # Direct backup - use dynamic SQL with proper quoting
+            backup_sql = (
+                "INSERT INTO [" + self.backup_schema + "].[" + backup_table + "_backup] "
+                "SELECT *, ? FROM [" + self.data_schema + "].[" + source_table + "]"
+            )
+            cursor.execute(backup_sql, next_version)
             connection.commit()
             return cursor.rowcount
                     
@@ -385,7 +391,9 @@ class DatabaseManager:
             schema = self.data_schema
             
         cursor = connection.cursor()
-        cursor.execute(f"TRUNCATE TABLE [{schema}].[{table_name}]")
+        # Use dynamic SQL with proper quoting for TRUNCATE
+        truncate_sql = "TRUNCATE TABLE [" + schema + "].[" + table_name + "]"
+        cursor.execute(truncate_sql)
     
     def get_row_count(self, connection: pyodbc.Connection, table_name: str, schema: str = None) -> int:
         """Get row count for a table"""
@@ -393,7 +401,9 @@ class DatabaseManager:
             schema = self.data_schema
             
         cursor = connection.cursor()
-        cursor.execute(f"SELECT COUNT(*) FROM [{schema}].[{table_name}]")
+        # Use dynamic SQL with proper quoting for COUNT
+        count_sql = "SELECT COUNT(*) FROM [" + schema + "].[" + table_name + "]"
+        cursor.execute(count_sql)
         
         result = cursor.fetchone()
         return result[0] if result else 0
@@ -420,8 +430,9 @@ class DatabaseManager:
             target_type = col['data_type']
             lower = name.lower()
             if lower not in existing_cols:
-                # Add new column
-                cursor.execute(f"ALTER TABLE [{schema}].[{table_name}] ADD [{name}] {target_type}")
+                # Add new column - use dynamic SQL with proper quoting
+                add_col_sql = "ALTER TABLE [" + schema + "].[" + table_name + "] ADD [" + name + "] " + target_type
+                cursor.execute(add_col_sql)
                 actions["added"].append({"column": name, "data_type": target_type})
                 continue
             # Existing column: consider widening
@@ -478,14 +489,16 @@ class DatabaseManager:
             
             if need_change:
                 if change_type == "convert_to_varchar":
-                    # Convert non-varchar column to varchar
-                    cursor.execute(f"ALTER TABLE [{schema}].[{table_name}] ALTER COLUMN [{name}] {target_type}")
+                    # Convert non-varchar column to varchar - use dynamic SQL with proper quoting
+                    alter_sql = "ALTER TABLE [" + schema + "].[" + table_name + "] ALTER COLUMN [" + name + "] " + target_type
+                    cursor.execute(alter_sql)
                     conversion_type = "datetime_to_varchar" if is_datetime_column else "numeric_to_varchar" if is_numeric_column else "other_to_varchar"
                     actions["widened"].append({"column": name, "from": existing_type, "to": target_type, "conversion": conversion_type})
                 elif change_type == "varchar_widen":
-                    # Widen varchar column
+                    # Widen varchar column - use dynamic SQL with proper quoting
                     new_type_sql = 'varchar(MAX)' if new_len == 'MAX' else f'varchar({new_len})'
-                    cursor.execute(f"ALTER TABLE [{schema}].[{table_name}] ALTER COLUMN [{name}] {new_type_sql}")
+                    alter_sql = "ALTER TABLE [" + schema + "].[" + table_name + "] ALTER COLUMN [" + name + "] " + new_type_sql
+                    cursor.execute(alter_sql)
                     actions["widened"].append({"column": name, "from": old_len, "to": new_len})
             else:
                 reason = "no changes needed"

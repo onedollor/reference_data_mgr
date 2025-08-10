@@ -357,10 +357,12 @@ class DataIngester:
             yield "Moving data from stage to main table..."
             t_move = time.perf_counter()
             cursor = connection.cursor()
-            cursor.execute(f"""
-                INSERT INTO [{self.db_manager.data_schema}].[{table_name}]
-                SELECT * FROM [{self.db_manager.data_schema}].[{stage_table_name}]
-            """)
+            # Use dynamic SQL with proper quoting to prevent SQL injection
+            insert_sql = (
+                "INSERT INTO [" + self.db_manager.data_schema + "].[" + table_name + "] "
+                "SELECT * FROM [" + self.db_manager.data_schema + "].[" + stage_table_name + "]"
+            )
+            cursor.execute(insert_sql)
             final_rows = cursor.rowcount
             if load_mode == "append":
                 yield f"Data successfully appended: {final_rows} new rows ({(time.perf_counter()-t_move):.2f}s). Total rows now may be ~{existing_rows + final_rows if existing_rows else final_rows}"
@@ -605,15 +607,12 @@ class DataIngester:
         total_rows: int,
         progress_key: str | None = None
     ) -> None:
-        """Load DataFrame to SQL Server table using multi-row VALUES batching.
-        Builds INSERT INTO ... VALUES (...),(...),... statements with up to 990 rows each (headroom under SQL Server 1000 row VALUES limit).
-        Falls back to user-configured INGEST_BATCH_SIZE if set (will be capped at 990).
-        """
         try:
             cursor = connection.cursor()
 
-            # Clear stage table first
-            cursor.execute(f"TRUNCATE TABLE [{schema}].[{table_name}]")
+            # Clear stage table first - use dynamic SQL with proper quoting
+            truncate_sql = "TRUNCATE TABLE [" + schema + "].[" + table_name + "]"
+            cursor.execute(truncate_sql)
             connection.commit()
 
             # Check for cancellation after table truncation

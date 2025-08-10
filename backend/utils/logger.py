@@ -269,14 +269,15 @@ class DatabaseLogger(Logger):
             connection = self.db_manager.get_connection()
             cursor = connection.cursor()
             
-            cursor.execute(f"""
-                SELECT TOP ({limit})
+            # Use parameterized query to prevent SQL injection
+            cursor.execute("""
+                SELECT TOP (?)
                     [timestamp], [level], [action_step], [message], 
                     [error_traceback], [file_name], [table_name], 
                     [row_count], [metadata]
                 FROM [ref].[system_log]
                 ORDER BY [timestamp] DESC, [log_id] DESC
-            """)
+            """, limit)
             
             cursor_results = cursor.fetchall()
             
