@@ -246,6 +246,7 @@ class DatabaseManager:
         # Add metadata columns if requested
         if add_metadata_columns:
             column_defs.append("[ref_data_loadtime] datetime DEFAULT GETDATE()")
+            column_defs.append("[loadtype] varchar(255)")
         
         # Create the table
         create_sql = f"""
@@ -296,6 +297,7 @@ class DatabaseManager:
         # Add backup-specific columns
         column_defs.extend([
             "[ref_data_loadtime] datetime",
+            "[loadtype] varchar(255)",
             "[version_id] int NOT NULL"
         ])
         
@@ -314,7 +316,7 @@ class DatabaseManager:
             
             # Filter out backup-specific metadata columns
             data_columns = [col for col in existing_columns 
-                           if col['name'] not in ['ref_data_loadtime', 'version_id']]
+                           if col['name'] not in ['ref_data_loadtime', 'loadtype', 'version_id']]
             
             # Create comparison sets (normalize data types)
             expected_set = set()
@@ -414,6 +416,33 @@ class DatabaseManager:
                 ]
             }
     
+    def ensure_backup_table_metadata_columns(self, connection: pyodbc.Connection, backup_table_name: str) -> Dict[str, Any]:
+        """Ensure backup table has all required metadata columns"""
+        cursor = connection.cursor()
+        existing_cols_list = self.get_table_columns(connection, backup_table_name, self.backup_schema)
+        existing_cols = {c['name'].lower(): c for c in existing_cols_list}
+        actions = {"added": [], "skipped": []}
+        
+        # Define required backup metadata columns
+        backup_metadata_columns = [
+            {"name": "ref_data_loadtime", "data_type": "datetime", "default": ""},
+            {"name": "loadtype", "data_type": "varchar(255)", "default": ""},
+            {"name": "version_id", "data_type": "int NOT NULL", "default": ""}
+        ]
+        
+        for meta_col in backup_metadata_columns:
+            col_name_lower = meta_col["name"].lower()
+            if col_name_lower not in existing_cols:
+                # Add missing metadata column
+                add_col_sql = f"ALTER TABLE [{self.backup_schema}].[{backup_table_name}] ADD [{meta_col['name']}] {meta_col['data_type']}"
+                cursor.execute(add_col_sql)
+                actions["added"].append({"column": meta_col["name"], "data_type": meta_col["data_type"]})
+                print(f"Added metadata column {meta_col['name']} to backup table {backup_table_name}")
+            else:
+                actions["skipped"].append({"column": meta_col["name"], "reason": "already exists"})
+        
+        return actions
+
     def backup_existing_data(self, connection: pyodbc.Connection, source_table: str, backup_table: str) -> int:
         """Backup existing data to backup table with version increment, filtering out trailer rows"""
         cursor = connection.cursor()
@@ -466,6 +495,36 @@ class DatabaseManager:
         result = cursor.fetchone()
         return result[0] if result else 0
     
+    def ensure_metadata_columns(self, connection: pyodbc.Connection, table_name: str, schema: str = None) -> Dict[str, Any]:
+        """Ensure metadata columns (ref_data_loadtime, loadtype) exist in the table"""
+        if schema is None:
+            schema = self.data_schema
+        
+        cursor = connection.cursor()
+        existing_cols_list = self.get_table_columns(connection, table_name, schema)
+        existing_cols = {c['name'].lower(): c for c in existing_cols_list}
+        actions = {"added": [], "skipped": []}
+        
+        # Define required metadata columns
+        metadata_columns = [
+            {"name": "ref_data_loadtime", "data_type": "datetime", "default": "DEFAULT GETDATE()"},
+            {"name": "loadtype", "data_type": "varchar(255)", "default": ""}
+        ]
+        
+        for meta_col in metadata_columns:
+            col_name_lower = meta_col["name"].lower()
+            if col_name_lower not in existing_cols:
+                # Add missing metadata column
+                default_clause = meta_col["default"] if meta_col["default"] else ""
+                add_col_sql = f"ALTER TABLE [{schema}].[{table_name}] ADD [{meta_col['name']}] {meta_col['data_type']} {default_clause}"
+                cursor.execute(add_col_sql)
+                actions["added"].append({"column": meta_col["name"], "data_type": meta_col["data_type"]})
+                print(f"Added metadata column {meta_col['name']} to {schema}.{table_name}")
+            else:
+                actions["skipped"].append({"column": meta_col["name"], "reason": "already exists"})
+        
+        return actions
+
     def sync_table_schema(self, connection: pyodbc.Connection, table_name: str, columns: List[Dict[str, str]], schema: str = None) -> Dict[str, Any]:
         """Synchronize existing table schema with target columns.
         Adds missing columns, widens varchar lengths, and converts any non-varchar columns to varchar.
@@ -568,60 +627,226 @@ class DatabaseManager:
                 actions["skipped"].append({"column": name, "reason": reason})
         return actions
 
-    def bulk_insert_from_file(
-        self,
-        connection: pyodbc.Connection,
-        table_name: str,
-        file_path: str,
-        schema: str = None,
-        field_terminator: str = ',',
-        row_terminator: str = '\n',
-        first_row: int = 2,
-        tablock: bool = True
-    ) -> Dict[str, Any]:
-        """Perform a BULK INSERT from a server-accessible file into an existing table.
-        Assumes the file includes a header row (FIRSTROW=2 by default).
-        Returns dict with rows_loaded (best-effort) and execution time.
-        NOTE: The SQL Server service must be able to access file_path on its filesystem.
-        """
-        import time as _time
-        start = _time.perf_counter()
-        if schema is None:
-            schema = self.data_schema
+    
+    def ensure_reference_data_cfg_table(self, connection: pyodbc.Connection) -> None:
+        """Ensure Reference_Data_Cfg table exists in StaffDatabase.dbo schema"""
         cursor = connection.cursor()
-        # Build base options; CODEPAGE sometimes unsupported on Linux SQL Server builds (error 16202)
-        bulk_options = [f"FIRSTROW={first_row}", "KEEPNULLS", f"FIELDTERMINATOR='{field_terminator}'", f"ROWTERMINATOR='{row_terminator}'"]
-        include_codepage = True
-        # Allow disabling via env override
-        if os.getenv('BULK_DISABLE_CODEPAGE', '0') in ('1','true','True'):
-            include_codepage = False
-        if include_codepage:
-            bulk_options.insert(2, "CODEPAGE='65001'")
-        if tablock:
-            bulk_options.append("TABLOCK")
-        options_sql = ', '.join(bulk_options)
-        # Escape single quotes in path
-        safe_path = file_path.replace("'", "''")
-        sql = f"BULK INSERT [{schema}].[{table_name}] FROM '{safe_path}' WITH ({options_sql});"
-        fallback_used = False
+        
+        # Check if table exists in dbo schema
+        table_exists_sql = """
+            SELECT COUNT(*) 
+            FROM INFORMATION_SCHEMA.TABLES 
+            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Reference_Data_Cfg'
+        """
+        cursor.execute(table_exists_sql)
+        exists = cursor.fetchone()[0] > 0
+        
+        if not exists:
+            # Create the Reference_Data_Cfg table
+            create_table_sql = """
+                CREATE TABLE [dbo].[Reference_Data_Cfg](
+                    [sp_name] [varchar](255) NOT NULL,
+                    [ref_name] [varchar](255) NOT NULL,
+                    [source_db] [varchar](4000) NULL,
+                    [source_schema] [varchar](255) NOT NULL,
+                    [source_table] [varchar](255) NOT NULL,
+                    [is_enabled] [int] NULL
+                ) ON [PRIMARY]
+            """
+            cursor.execute(create_table_sql)
+            
+            # Add primary key constraint
+            add_pk_sql = """
+                ALTER TABLE [dbo].[Reference_Data_Cfg] 
+                ADD CONSTRAINT [pk_ref_data_cfg] PRIMARY KEY CLUSTERED 
+                ([ref_name] ASC)
+                WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, 
+                      IGNORE_DUP_KEY = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) 
+                ON [PRIMARY]
+            """
+            cursor.execute(add_pk_sql)
+            
+            connection.commit()
+            print("Created Reference_Data_Cfg table in dbo schema")
+    
+    def ensure_postload_stored_procedure(self, connection: pyodbc.Connection) -> None:
+        """Ensure ref.usp_reference_data_postLoad stored procedure exists"""
+        cursor = connection.cursor()
+        
         try:
-            cursor.execute(sql)
-        except pyodbc.ProgrammingError as e:
-            msg = str(e)
-            # Error 16202 indicates CODEPAGE not supported on Linux platform
-            if "16202" in msg and "CODEPAGE" in msg and include_codepage:
-                # Retry without CODEPAGE
-                fallback_used = True
-                bulk_options = [opt for opt in bulk_options if not opt.startswith('CODEPAGE')]
-                options_sql = ', '.join(bulk_options)
-                sql = f"BULK INSERT [{schema}].[{table_name}] FROM '{safe_path}' WITH ({options_sql});"
-                cursor.execute(sql)
+            # Check if stored procedure exists in ref schema
+            check_sp_sql = """
+                SELECT COUNT(*) 
+                FROM INFORMATION_SCHEMA.ROUTINES 
+                WHERE ROUTINE_SCHEMA = 'ref' AND ROUTINE_NAME = 'usp_reference_data_postLoad' AND ROUTINE_TYPE = 'PROCEDURE'
+            """
+            cursor.execute(check_sp_sql)
+            exists = cursor.fetchone()[0] > 0
+            
+            if not exists:
+                # Create empty stored procedure
+                create_sp_sql = """
+                    CREATE PROCEDURE [ref].[usp_reference_data_postLoad]
+                    AS
+                    BEGIN
+                        -- Empty post-load procedure - customize as needed
+                        -- This procedure is called after each successful reference data ingestion
+                        PRINT 'Post-load procedure executed - no custom logic defined'
+                    END
+                """
+                cursor.execute(create_sp_sql)
+                connection.commit()
+                print("Created empty ref.usp_reference_data_postLoad stored procedure")
             else:
-                raise
-        # Row count may not be returned; we can query COUNT(*) afterwards if desired
-        elapsed = _time.perf_counter() - start
+                print("ref.usp_reference_data_postLoad stored procedure already exists")
+                
+        except Exception as e:
+            connection.rollback()
+            error_msg = f"Failed to create ref.usp_reference_data_postLoad stored procedure: {str(e)}"
+            print(f"WARNING: {error_msg}")
+            # Don't raise - this shouldn't fail the entire startup
+    
+    def determine_load_type(self, connection: pyodbc.Connection, table_name: str, current_load_mode: str, override_load_type: str = None) -> str:
+        """
+        Determine the loadtype value based on existing data and current load mode.
+        Rules:
+        - If override_load_type provided: Use override ('F' or 'A')
+        - First time ingest: Use current load mode ('F' for full, 'A' for append)
+        - Subsequent ingests: Check existing distinct loadtype values
+          - If only 'F' exists: Use 'F'
+          - If only 'A' exists: Use 'A' 
+          - If both 'A' and 'F' exist: Use 'F'
+        """
         try:
-            count = self.get_row_count(connection, table_name, schema)
-        except Exception:
-            count = None
-        return {"elapsed": elapsed, "row_count_post": count, "file": file_path, "options": options_sql, "fallback_no_codepage": fallback_used}
+            # If user provided override, use it
+            if override_load_type:
+                override_upper = override_load_type.strip().upper()
+                if override_upper in ['F', 'A', 'FULL', 'APPEND']:
+                    return 'F' if override_upper in ['F', 'FULL'] else 'A'
+            cursor = connection.cursor()
+            
+            # Check if table exists and has data
+            if not self.table_exists(connection, table_name):
+                # First time - use current load mode
+                return 'F' if current_load_mode == 'full' else 'A'
+            
+            # Get row count
+            row_count = self.get_row_count(connection, table_name)
+            if row_count == 0:
+                # Empty table - use current load mode
+                return 'F' if current_load_mode == 'full' else 'A'
+            
+            # Get distinct loadtype values from existing data
+            query = f"SELECT DISTINCT [loadtype] FROM [{self.data_schema}].[{table_name}] WHERE [loadtype] IS NOT NULL"
+            cursor.execute(query)
+            existing_types = set()
+            for row in cursor.fetchall():
+                if row[0]:  # Not NULL
+                    existing_types.add(row[0].strip().upper())
+            
+            # Apply rules
+            if not existing_types:
+                # No existing loadtype data - use current load mode
+                return 'F' if current_load_mode == 'full' else 'A'
+            elif 'F' in existing_types and 'A' in existing_types:
+                # Both F and A exist - return F
+                return 'F'
+            elif 'F' in existing_types:
+                # Only F exists - return F
+                return 'F'
+            elif 'A' in existing_types:
+                # Only A exists - return A
+                return 'A'
+            else:
+                # Unknown values - default to current load mode
+                return 'F' if current_load_mode == 'full' else 'A'
+                
+        except Exception as e:
+            # On error, default to current load mode
+            print(f"WARNING: Failed to determine load type for {table_name}: {str(e)}")
+            return 'F' if current_load_mode == 'full' else 'A'
+    
+    def insert_reference_data_cfg_record(self, connection: pyodbc.Connection, table_name: str) -> None:
+        """Insert a record into Reference_Data_Cfg table after successful ingestion"""
+        cursor = connection.cursor()
+        
+        try:
+            # Get the current database name
+            cursor.execute("SELECT DB_NAME()")
+            database_name = cursor.fetchone()[0]
+            
+            # Prepare the record data
+            sp_name = f"usp_RefreshReferenceData_{database_name}"
+            ref_name = f"ref_{table_name}"
+            source_db = database_name
+            source_schema = "ref"
+            source_table = table_name
+            is_enabled = 1
+            
+            # Check if record already exists and compare all columns
+            check_sql = """
+                SELECT [sp_name], [source_db], [source_schema], [source_table], [is_enabled]
+                FROM [dbo].[Reference_Data_Cfg] 
+                WHERE [ref_name] = ?
+            """
+            cursor.execute(check_sql, ref_name)
+            existing_record = cursor.fetchone()
+            
+            if existing_record is None:
+                # Insert new record if it doesn't exist
+                insert_sql = """
+                    INSERT INTO [dbo].[Reference_Data_Cfg] 
+                    ([sp_name], [ref_name], [source_db], [source_schema], [source_table], [is_enabled])
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """
+                cursor.execute(insert_sql, sp_name, ref_name, source_db, source_schema, source_table, is_enabled)
+                print(f"Inserted new Reference_Data_Cfg record for {ref_name}")
+            else:
+                # Compare all columns to see if update is needed
+                existing_sp_name = existing_record[0]
+                existing_source_db = existing_record[1] 
+                existing_source_schema = existing_record[2]
+                existing_source_table = existing_record[3]
+                existing_is_enabled = existing_record[4]
+                
+                # Check if any values are different
+                needs_update = (
+                    existing_sp_name != sp_name or
+                    existing_source_db != source_db or
+                    existing_source_schema != source_schema or
+                    existing_source_table != source_table or
+                    existing_is_enabled != is_enabled
+                )
+                
+                if needs_update:
+                    # Update existing record with new values
+                    update_sql = """
+                        UPDATE [dbo].[Reference_Data_Cfg] 
+                        SET [sp_name] = ?, [source_db] = ?, [source_schema] = ?, 
+                            [source_table] = ?, [is_enabled] = ?
+                        WHERE [ref_name] = ?
+                    """
+                    cursor.execute(update_sql, sp_name, source_db, source_schema, source_table, is_enabled, ref_name)
+                    print(f"Updated Reference_Data_Cfg record for {ref_name} (values changed)")
+                else:
+                    print(f"Reference_Data_Cfg record for {ref_name} unchanged - no update needed")
+            
+            connection.commit()
+            
+            # Call post-load stored procedure
+            try:
+                postload_cursor = connection.cursor()
+                postload_cursor.execute("EXEC [ref].[usp_reference_data_postLoad]")
+                connection.commit()
+                print(f"Called ref.usp_reference_data_postLoad stored procedure")
+            except Exception as sp_error:
+                # Log warning but don't fail the entire process
+                print(f"WARNING: Failed to call ref.usp_reference_data_postLoad: {str(sp_error)}")
+                # Don't rollback the Reference_Data_Cfg changes if SP fails
+            
+        except Exception as e:
+            connection.rollback()
+            error_msg = f"Failed to insert/update Reference_Data_Cfg record for {table_name}: {str(e)}"
+            print(f"WARNING: {error_msg}")
+            # Don't raise - this shouldn't fail the entire ingestion process
+            # Just log the warning and continue

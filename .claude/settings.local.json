@@ -33,7 +33,8 @@
       "Bash(sudo rm:*)",
       "Bash(sudo snap install:*)",
       "Bash(gh auth:*)",
-      "Bash(gh:*)"
+      "Bash(gh:*)",
+      "WebFetch(domain:td.com)"
     ],
     "deny": []
   }

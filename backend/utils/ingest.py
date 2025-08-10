@@ -44,7 +44,8 @@ class DataIngester:
         file_path: str, 
         fmt_file_path: str, 
         load_mode: str, 
-        filename: str
+        filename: str,
+        override_load_type: str = None
     ) -> AsyncGenerator[str, None]:
         """Main ingestion function.
         Simplified: always reads full file then performs multi-row INSERT batching (≤990 rows per statement).
@@ -184,7 +185,15 @@ class DataIngester:
                 yield "Cancellation requested - stopping before data processing"
                 raise Exception("Ingestion canceled by user")
 
-            # Step 7: Check existing data for backup (BEFORE creating tables)
+            # Step 7: Determine load type for this ingestion
+            yield "Determining load type based on existing data..."
+            determined_load_type = self.db_manager.determine_load_type(connection, table_name, load_mode, override_load_type)
+            if override_load_type:
+                yield f"Load type overridden by user: {'Full Load' if determined_load_type == 'F' else 'Append Load'} (code: {determined_load_type})"
+            else:
+                yield f"Load type determined: {'Full Load' if determined_load_type == 'F' else 'Append Load'} (code: {determined_load_type})"
+
+            # Step 8: Check existing data for backup (BEFORE creating tables)
             existing_rows = 0
             table_exists = self.db_manager.table_exists(connection, table_name)
 
@@ -202,7 +211,7 @@ class DataIngester:
                 yield "Cancellation requested - stopping before table operations"
                 raise Exception("Ingestion canceled by user")
 
-            # Step 8: Create/validate tables
+            # Step 9: Create/validate tables
             yield "Creating/validating database tables..."
             t_tables = time.perf_counter()
 
@@ -220,6 +229,13 @@ class DataIngester:
             # Backup existing data BEFORE dropping table
             if existing_rows > 0 and load_mode == "full":
                 yield "Backing up existing data before table recreation..."
+                # Ensure backup table has proper metadata columns
+                backup_table_name = f"{table_base_name}_backup"
+                if self.db_manager.table_exists(connection, backup_table_name, self.db_manager.backup_schema):
+                    backup_meta_actions = self.db_manager.ensure_backup_table_metadata_columns(connection, backup_table_name)
+                    if backup_meta_actions['added']:
+                        yield f"Added missing metadata columns to backup table: {[col['column'] for col in backup_meta_actions['added']]}"
+                
                 backup_rows = self.db_manager.backup_existing_data(connection, table_name, table_base_name)
                 yield f"Existing data backed up: {backup_rows} rows with version tracking"
 
@@ -237,6 +253,14 @@ class DataIngester:
                     self.db_manager.create_table(connection, table_name, columns, add_metadata_columns=True)
                 else:
                     yield "Append mode: preserving existing main table schema"
+                    # Ensure metadata columns exist first
+                    try:
+                        meta_actions = self.db_manager.ensure_metadata_columns(connection, table_name)
+                        if meta_actions['added']:
+                            yield f"Added missing metadata columns to main table: {[col['column'] for col in meta_actions['added']]}"
+                    except Exception as e:
+                        yield f"WARNING: Failed to add metadata columns to main table: {e}"
+                    
                     # Sync main table schema to handle wider varchar columns
                     if self.enable_type_inference:
                         try:
@@ -249,14 +273,20 @@ class DataIngester:
             if stage_exists:
                 yield "Stage table exists, checking schema compatibility..."
                 try:
+                    # Ensure metadata columns exist first
+                    meta_actions = self.db_manager.ensure_metadata_columns(connection, stage_table_name)
+                    if meta_actions['added']:
+                        yield f"Added missing metadata columns to stage table: {[col['column'] for col in meta_actions['added']]}"
+                    
                     # Always try to sync stage table schema to handle wider varchar columns
                     sync_actions = self.db_manager.sync_table_schema(connection, stage_table_name, columns)
                     if sync_actions['added'] or sync_actions['widened']:
                         yield f"Stage table schema updated: added={len(sync_actions['added'])}, widened={len(sync_actions['widened'])}"
                     else:
                         yield "Stage table schema is compatible, reusing existing table"
-                        # Clear existing data since we're reusing the table
-                        self.db_manager.truncate_table(connection, stage_table_name)
+                    
+                    # Clear existing data since we're reusing the table
+                    self.db_manager.truncate_table(connection, stage_table_name)
                 except Exception as e:
                     yield f"Stage table schema sync failed, recreating table: {str(e)}"
                     # If sync fails, drop and recreate
@@ -271,7 +301,7 @@ class DataIngester:
             yield f"Database tables created/validated ({(time.perf_counter()-t_tables):.2f}s)"
             prog.update_progress(progress_key, stage='tables_ready')
 
-            # Step 9: Process and load data to stage table
+            # Step 10: Process and load data to stage table
             yield "Processing CSV data..."
             t_process = time.perf_counter()
             column_mapping = {orig: san for orig, san in valid_headers}
@@ -297,7 +327,8 @@ class DataIngester:
                 stage_table_name,
                 self.db_manager.data_schema,
                 total_rows,
-                progress_key
+                progress_key,
+                determined_load_type
             )
             elapsed_load = time.perf_counter()-t_load
             rps = (total_rows/elapsed_load) if elapsed_load>0 else 0
@@ -314,7 +345,7 @@ class DataIngester:
                 yield "Cancellation requested - stopping before validation"
                 raise Exception("Ingestion canceled by user")
 
-            # Step 10: Validate data
+            # Step 11: Validate data
             yield "Executing data validation..."
             t_validate = time.perf_counter()
 
@@ -343,7 +374,7 @@ class DataIngester:
                 yield "Cancellation requested - stopping after validation"
                 raise Exception("Ingestion canceled by user")
 
-            # Step 11: Prepare for data load (full load mode already handled backup)
+            # Step 12: Prepare for data load (full load mode already handled backup)
             if load_mode == "full":
                 yield "Preparing for full load (existing data already backed up if any existed)"
             else:
@@ -356,7 +387,7 @@ class DataIngester:
                 yield "Cancellation requested - stopping before final data move"
                 raise Exception("Ingestion canceled by user")
 
-            # Step 12: Move data from stage to main table
+            # Step 13: Move data from stage to main table
             yield "Moving data from stage to main table..."
             t_move = time.perf_counter()
             cursor = connection.cursor()
@@ -378,7 +409,7 @@ class DataIngester:
                 yield "Cancellation requested - stopping before archiving"
                 raise Exception("Ingestion canceled by user")
 
-            # Step 13: Archive the file
+            # Step 14: Archive the file
             yield "Archiving processed file..."
             t_archive = time.perf_counter()
             archive_path = self.file_handler.move_to_archive(file_path, filename)
@@ -393,6 +424,23 @@ class DataIngester:
                 "data_ingestion",
                 f"Successfully ingested {final_rows} rows from {filename} to table {table_name}"
             )
+            
+            # Insert/update record in Reference_Data_Cfg table and call post-load procedure
+            try:
+                self.db_manager.insert_reference_data_cfg_record(connection, table_name)
+                yield f"Reference_Data_Cfg record processed and post-load procedure called for table {table_name}"
+                await self.logger.log_info(
+                    "reference_data_cfg",
+                    f"Reference_Data_Cfg record processed and ref.usp_reference_data_postLoad called for table {table_name}"
+                )
+            except Exception as cfg_error:
+                # Log warning but don't fail the entire ingestion
+                warning_msg = f"Warning: Failed to process Reference_Data_Cfg or call post-load procedure: {str(cfg_error)}"
+                yield f"WARNING: {warning_msg}"
+                await self.logger.log_warning(
+                    "reference_data_cfg_error",
+                    warning_msg
+                )
 
         except Exception as e:
             error_msg = f"Data ingestion failed: {str(e)}"
@@ -608,7 +656,8 @@ class DataIngester:
         table_name: str, 
         schema: str,
         total_rows: int,
-        progress_key: str | None = None
+        progress_key: str | None = None,
+        load_type: str = 'F'
     ) -> None:
         try:
             cursor = connection.cursor()
@@ -628,7 +677,9 @@ class DataIngester:
 
             # Prepare column list and SQL statement once
             data_columns = [col for col in df.columns]
-            column_list = ', '.join([f'[{col}]' for col in data_columns])
+            # Add only loadtype to the column list (let ref_data_loadtime use DEFAULT GETDATE())
+            insert_columns = data_columns + ['loadtype']
+            column_list = ', '.join([f'[{col}]' for col in insert_columns])
             # Trailer removal is now handled before this function is called
             
             # Batch sizing
@@ -674,8 +725,9 @@ class DataIngester:
                 batch_size = len(slice_df)
                 
                 # Use parameterized queries with multi-row VALUES to prevent SQL injection
-                # Create placeholders for all rows in this batch: (?,?), (?,?), (?,?)...
-                single_row_placeholders = '(' + ', '.join(['?' for _ in data_columns]) + ')'
+                # Create placeholders for all rows in this batch: (?,?,...), (?,?,...), (?,?,...)...
+                # Include placeholders for data columns + loadtype (ref_data_loadtime uses DEFAULT)
+                single_row_placeholders = '(' + ', '.join(['?' for _ in insert_columns]) + ')'
                 all_rows_placeholders = ', '.join([single_row_placeholders for _ in range(batch_size)])
                 sql = f"INSERT INTO [{schema}].[{table_name}] ({column_list}) VALUES {all_rows_placeholders}"
                 
@@ -683,20 +735,22 @@ class DataIngester:
                 batch_params = []
                 for _, row in slice_df.iterrows():
                     row_values = [prepare_value(row[c], c) for c in data_columns]
+                    # Add only loadtype (ref_data_loadtime will use DEFAULT GETDATE())
+                    row_values.append(load_type)
                     batch_params.extend(row_values)  # Flatten into single list
                 
                 # Debug: Check parameter count before execution
-                expected_params = batch_size * len(data_columns)
+                expected_params = batch_size * len(insert_columns)
                 actual_params = len(batch_params)
                 placeholder_count = sql.count('?')
                 
                 if expected_params != actual_params or expected_params != placeholder_count:
-                    error_msg = f"Parameter mismatch: expected={expected_params}, actual={actual_params}, placeholders={placeholder_count}, batch_size={batch_size}, columns={len(data_columns)}"
+                    error_msg = f"Parameter mismatch: expected={expected_params}, actual={actual_params}, placeholders={placeholder_count}, batch_size={batch_size}, columns={len(insert_columns)}"
                     await self.logger.log_error("parameter_mismatch", error_msg)
                     raise Exception(error_msg)
                 
                 # Temporarily use individual INSERT statements to avoid SQL Server issues
-                single_sql = f"INSERT INTO [{schema}].[{table_name}] ({column_list}) VALUES ({', '.join(['?' for _ in data_columns])})"
+                single_sql = f"INSERT INTO [{schema}].[{table_name}] ({column_list}) VALUES ({', '.join(['?' for _ in insert_columns])})"
 
                 connection.autocommit = False
                 for row_idx, row in slice_df.iterrows():
@@ -705,6 +759,8 @@ class DataIngester:
                         for col in data_columns:
                             value = prepare_value(row[col], col)
                             row_values.append(value)
+                        # Add only loadtype (ref_data_loadtime will use DEFAULT GETDATE())
+                        row_values.append(load_type)
                         cursor.execute(single_sql, row_values)
                             
                     except Exception as e:

@@ -185,14 +185,17 @@ class FileHandler:
             
             # Remove timestamp patterns
             table_base_name = base_name
+            pattern_matched = False
             for pattern in timestamp_patterns:
-                table_base_name = re.sub(pattern, '', table_base_name)
+                if re.search(pattern, table_base_name):
+                    table_base_name = re.sub(pattern, '', table_base_name)
+                    pattern_matched = True
             
-            # If no patterns matched, use the first part before any separator
-            if table_base_name == base_name:
-                # Split by dots and underscores, take first non-empty part
-                parts = re.split(r'[._]', base_name)
-                table_base_name = parts[0] if parts and parts[0] else base_name
+            # Only apply fallback splitting if we didn't find any timestamp patterns
+            # This preserves underscores in regular filenames like "medium_test.csv"
+            if not pattern_matched:
+                # Keep the full base name without timestamp extraction
+                table_base_name = base_name
             
             # Sanitize table name (only allow alphanumeric and underscore)
             sanitized_name = ''.join(c if c.isalnum() or c == '_' else '_' for c in table_base_name)

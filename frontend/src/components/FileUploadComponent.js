@@ -18,6 +18,7 @@ import {
   Input
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import LoadTypeWarningDialog from './LoadTypeWarningDialog';
 
 const FileUploadComponent = ({ 
   config, 
@@ -58,8 +59,11 @@ const FileUploadComponent = ({
   });
   const [uploadError, setUploadError] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [showLoadTypeDialog, setShowLoadTypeDialog] = useState(false);
+  const [loadTypeVerification, setLoadTypeVerification] = useState(null);
+  const [pendingUploadData, setPendingUploadData] = useState(null);
 
-  const handleFileSelect = (event) => {
+  const handleFileSelect = async (event) => {
     const file = event.target.files[0];
     if (file) {
       if (file.size > config.max_upload_size) {
@@ -71,6 +75,77 @@ const FileUploadComponent = ({
       } else {
         setSelectedFile(file);
         setUploadError('');
+        
+        // Reset auto-detection state
+        setAutoDetection({
+          isDetecting: false,
+          detected: false,
+          confidence: 0,
+          suggestions: null,
+          analysis: null
+        });
+        
+        // Automatically trigger format detection after file selection
+        // Use setTimeout to ensure file state is updated first
+        setTimeout(async () => {
+          try {
+            setAutoDetection(prev => ({ ...prev, isDetecting: true }));
+            
+            // Reset trailer line to empty when starting auto-detection
+            setFormatConfig(prev => ({
+              ...prev,
+              trailer_line: ''
+            }));
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const response = await fetch('/detect-format', {
+              method: 'POST',
+              body: formData,
+            });
+
+            if (!response.ok) {
+              throw new Error('Format detection failed');
+            }
+
+            const result = await response.json();
+            
+            const detected = {
+              isDetecting: false,
+              detected: true,
+              confidence: result.confidence,
+              suggestions: result.detected_format,
+              analysis: result.analysis
+            };
+            setAutoDetection(detected);
+            
+            // Immediately apply detected settings (auto-save behavior)
+            if (detected.suggestions) {
+              setFormatConfig(prev => ({
+                ...prev,
+                header_delimiter: detected.suggestions.header_delimiter,
+                column_delimiter: detected.suggestions.column_delimiter,
+                row_delimiter: detected.suggestions.row_delimiter,
+                text_qualifier: detected.suggestions.text_qualifier,
+                skip_lines: detected.suggestions.skip_lines,
+                trailer_line: detected.suggestions.trailer_line || ''
+              }));
+            }
+            
+            console.log('Auto-detection completed after file selection');
+
+          } catch (error) {
+            console.error('Auto-detection failed:', error);
+            setAutoDetection({
+              isDetecting: false,
+              detected: false,
+              confidence: 0,
+              suggestions: null,
+              analysis: null
+            });
+          }
+        }, 100); // Small delay to ensure state updates
       }
     }
   };
@@ -219,6 +294,64 @@ const FileUploadComponent = ({
     );
   };
 
+  const verifyLoadType = async () => {
+    if (!selectedFile) return;
+
+    try {
+      const formData = new FormData();
+      formData.append('filename', selectedFile.name);
+      formData.append('load_mode', formatConfig.load_mode);
+
+      const response = await fetch('/verify-load-type', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        return result;
+      } else {
+        console.warn('Load type verification failed, proceeding with upload');
+        return null;
+      }
+    } catch (error) {
+      console.warn('Load type verification error:', error);
+      return null;
+    }
+  };
+
+  const performUpload = async (overrideLoadType = null) => {
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('header_delimiter', formatConfig.header_delimiter);
+    formData.append('column_delimiter', formatConfig.column_delimiter);
+    formData.append('row_delimiter', formatConfig.row_delimiter);
+    formData.append('text_qualifier', formatConfig.text_qualifier);
+    formData.append('skip_lines', formatConfig.skip_lines.toString());
+    formData.append('load_mode', formatConfig.load_mode);
+    
+    if (formatConfig.trailer_line) {
+      formData.append('trailer_line', formatConfig.trailer_line);
+    }
+    
+    if (overrideLoadType) {
+      formData.append('override_load_type', overrideLoadType);
+    }
+
+    const response = await fetch('/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const result = await response.json();
+
+    if (response.ok) {
+      onUploadComplete(result);
+    } else {
+      throw new Error(result.detail || 'Upload failed');
+    }
+  };
+
   const handleUpload = async () => {
     if (!selectedFile) return;
 
@@ -227,32 +360,19 @@ const FileUploadComponent = ({
     onUploadStart();
 
     try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('header_delimiter', formatConfig.header_delimiter);
-      formData.append('column_delimiter', formatConfig.column_delimiter);
-      formData.append('row_delimiter', formatConfig.row_delimiter);
-      formData.append('text_qualifier', formatConfig.text_qualifier);
-      formData.append('skip_lines', formatConfig.skip_lines.toString());
-      formData.append('load_mode', formatConfig.load_mode);
+      // First, verify load type compatibility
+      const verification = await verifyLoadType();
       
-      if (formatConfig.trailer_line) {
-        formData.append('trailer_line', formatConfig.trailer_line);
+      if (verification && verification.has_mismatch) {
+        // Show warning dialog for mismatch
+        setLoadTypeVerification(verification);
+        setShowLoadTypeDialog(true);
+        setIsUploading(false); // Stop loading while waiting for user decision
+        return;
       }
-
-      const response = await fetch('/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-  onUploadComplete(result);
-  // Do not mark processing complete yet; polling will handle completion when ingestion done
-      } else {
-        throw new Error(result.detail || 'Upload failed');
-      }
+      
+      // No mismatch or verification failed - proceed with upload
+      await performUpload();
 
     } catch (error) {
       setUploadError(`Upload failed: ${error.message}`);
@@ -260,6 +380,28 @@ const FileUploadComponent = ({
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleLoadTypeOverride = async (overrideType) => {
+    setShowLoadTypeDialog(false);
+    setIsUploading(true);
+
+    try {
+      await performUpload(overrideType);
+    } catch (error) {
+      setUploadError(`Upload failed: ${error.message}`);
+      onProcessingComplete();
+    } finally {
+      setIsUploading(false);
+      setLoadTypeVerification(null);
+    }
+  };
+
+  const handleLoadTypeCancel = () => {
+    setShowLoadTypeDialog(false);
+    setLoadTypeVerification(null);
+    setIsUploading(false);
+    onProcessingComplete();
   };
 
 
@@ -308,21 +450,26 @@ const FileUploadComponent = ({
       {selectedFile && (
         <Box sx={{ mb: 3 }}>
           <Typography variant="subtitle1" gutterBottom>
-            Auto-Detect Format
+            Format Detection
           </Typography>
           
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
             <Button
-              variant="contained"
+              variant={autoDetection.detected ? "outlined" : "contained"}
               color="secondary"
               onClick={detectFormat}
               disabled={disabled || autoDetection.isDetecting}
               startIcon={autoDetection.isDetecting ? <CircularProgress size={20} /> : null}
             >
-              {autoDetection.isDetecting ? 'Detecting...' : 'Auto-Detect Format'}
+              {autoDetection.isDetecting ? 'Detecting...' : 
+               autoDetection.detected ? 'Re-Detect Format' : 'Auto-Detect Format'}
             </Button>
             
-            {/* Apply button removed: detection auto-applies settings */}
+            {autoDetection.detected && (
+              <Typography variant="body2" color="text.secondary">
+                (Auto-detected on file selection)
+              </Typography>
+            )}
           </Box>
 
           {autoDetection.detected && autoDetection.suggestions && (
@@ -434,6 +581,14 @@ const FileUploadComponent = ({
           </Typography>
         </Box>
       )}
+
+      {/* Load Type Warning Dialog */}
+      <LoadTypeWarningDialog
+        open={showLoadTypeDialog}
+        onClose={handleLoadTypeCancel}
+        onConfirm={handleLoadTypeOverride}
+        verificationData={loadTypeVerification}
+      />
     </Box>
   );
 };

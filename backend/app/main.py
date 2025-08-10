@@ -21,6 +21,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Form, BackgroundTa
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 import uvicorn
+import traceback
 from dotenv import load_dotenv
 
 from utils.database import DatabaseManager
@@ -37,6 +38,23 @@ app = FastAPI(
     description="Automated reference data ingestion from CSV files to SQL Server",
     version="1.0.0"
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database and ensure required tables and procedures exist on startup"""
+    try:
+        # Initialize database connection and check required objects
+        connection = db_manager.get_connection()
+        db_manager.ensure_reference_data_cfg_table(connection)
+        db_manager.ensure_postload_stored_procedure(connection)
+        connection.close()
+        await logger.log_info("startup", "Application started successfully - Reference_Data_Cfg table and post-load procedure verified")
+    except Exception as e:
+        error_msg = f"Startup failed: {str(e)}"
+        print(f"ERROR: {error_msg}")
+        await logger.log_error("startup", error_msg, traceback.format_exc())
+        # Continue startup - don't fail the entire application
+        pass
 
 # Add CORS middleware
 app.add_middleware(
@@ -177,7 +195,8 @@ async def upload_file(
     text_qualifier: str = Form('"'),
     skip_lines: int = Form(0),
     trailer_line: Optional[str] = Form(None),
-    load_mode: str = Form("full")  # full or append
+    load_mode: str = Form("full"),  # full or append
+    override_load_type: Optional[str] = Form(None)  # Optional override for load type
 ):
     """Upload and process CSV file"""
     try:
@@ -209,7 +228,8 @@ async def upload_file(
             temp_file_path,
             fmt_file_path,
             load_mode,
-            file.filename
+            file.filename,
+            override_load_type
         )
         
         return {
@@ -332,23 +352,22 @@ async def feature_flags():
         "append_mode_schema_sync": True,
         "pooling": True,
         "dry_run": os.getenv("INGEST_DRY_RUN", "0"),
-        "stream_commit_rows": os.getenv("INGEST_STREAM_COMMIT_ROWS", "50000"),
-        "bulk_insert": os.getenv("INGEST_BULK_INSERT", "0"),
-        "bulk_min_rows": os.getenv("INGEST_BULK_MIN_ROWS", "50000")
+        "stream_commit_rows": os.getenv("INGEST_STREAM_COMMIT_ROWS", "50000")
     }
 
 async def ingest_data_background(
     file_path: str, 
     fmt_file_path: str, 
     load_mode: str, 
-    filename: str
+    filename: str,
+    override_load_type: str = None
 ):
     """Background task for data ingestion"""
     try:
         from utils.ingest import DataIngester
         ingester = DataIngester(db_manager, logger)
         
-        async for progress in ingester.ingest_data(file_path, fmt_file_path, load_mode, filename):
+        async for progress in ingester.ingest_data(file_path, fmt_file_path, load_mode, filename, override_load_type):
             await logger.log_info("background_ingestion", f"Progress: {progress}")
             
     except Exception as e:
@@ -412,6 +431,116 @@ async def cancel_ingestion(key: str):
     current_progress = prog.get_progress(key)
     await logger.log_info("cancel_status", f"[{timestamp}] Progress after cancel request: {current_progress}")
     return {"message": "cancel requested", "key": key, "timestamp": timestamp}
+
+@app.post("/verify-load-type")
+async def verify_load_type(
+    filename: str = Form(...),
+    load_mode: str = Form(...)
+):
+    """Verify load type compatibility between current load mode and existing table data"""
+    connection = None
+    try:
+        connection = db_manager.get_connection()
+        
+        # Extract table name from filename  
+        from utils.file_handler import FileHandler
+        file_handler = FileHandler()
+        table_name = file_handler.extract_table_base_name(filename)
+        
+        # Get current load type that would be determined
+        current_load_type = db_manager.determine_load_type(connection, table_name, load_mode)
+        
+        # Get requested load type
+        requested_load_type = 'F' if load_mode == 'full' else 'A'
+        
+        # Check if there's a mismatch
+        mismatch = current_load_type != requested_load_type
+        
+        # Get existing load types for context
+        existing_load_types = []
+        if db_manager.table_exists(connection, table_name):
+            cursor = connection.cursor()
+            try:
+                query = f"SELECT DISTINCT [loadtype] FROM [{db_manager.data_schema}].[{table_name}] WHERE [loadtype] IS NOT NULL"
+                cursor.execute(query)
+                for row in cursor.fetchall():
+                    if row[0]:
+                        existing_load_types.append(row[0].strip())
+            except Exception:
+                pass  # Table might not have loadtype column yet
+        
+        result = {
+            "table_name": table_name,
+            "requested_load_mode": load_mode,
+            "requested_load_type": requested_load_type,
+            "determined_load_type": current_load_type,
+            "has_mismatch": mismatch,
+            "existing_load_types": existing_load_types,
+            "table_exists": db_manager.table_exists(connection, table_name),
+            "explanation": f"Based on existing data, load type will be '{current_load_type}' but you requested '{requested_load_type}'"
+        }
+        
+        await logger.log_info("load_type_verification", f"Verified load type for {table_name}: mismatch={mismatch}")
+        
+        return JSONResponse(content=result)
+        
+    except Exception as e:
+        error_msg = f"Failed to verify load type: {str(e)}"
+        await logger.log_error("load_type_verification", error_msg, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=error_msg)
+    finally:
+        if connection:
+            try:
+                connection.close()
+            except Exception:
+                pass
+
+@app.get("/reference-data-config")
+async def get_reference_data_config():
+    """Get all Reference_Data_Cfg records"""
+    connection = None
+    try:
+        connection = db_manager.get_connection()
+        cursor = connection.cursor()
+        
+        # Query all records from Reference_Data_Cfg table
+        query = """
+            SELECT [sp_name], [ref_name], [source_db], [source_schema], [source_table], [is_enabled]
+            FROM [dbo].[Reference_Data_Cfg]
+            ORDER BY [ref_name]
+        """
+        cursor.execute(query)
+        
+        # Convert results to list of dictionaries
+        columns = [column[0] for column in cursor.description]
+        results = []
+        for row in cursor.fetchall():
+            row_dict = {}
+            for i, value in enumerate(row):
+                row_dict[columns[i]] = value
+            results.append(row_dict)
+        
+        await logger.log_info("reference_data_config_query", f"Retrieved {len(results)} Reference_Data_Cfg records")
+        
+        return JSONResponse(
+            content={"data": results, "count": len(results)},
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
+        
+    except Exception as e:
+        error_msg = f"Failed to retrieve Reference_Data_Cfg records: {str(e)}"
+        await logger.log_error("reference_data_config_query", error_msg, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=error_msg)
+    finally:
+        if connection:
+            try:
+                connection.close()
+            except Exception:
+                pass
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

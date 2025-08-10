@@ -5,12 +5,17 @@ import {
   Paper,
   Box,
   Alert,
-  CircularProgress
+  CircularProgress,
+  AppBar,
+  Toolbar,
+  Card,
+  CardContent
 } from '@mui/material';
 import FileUploadComponent from './components/FileUploadComponent';
 import ProgressDisplay from './components/ProgressDisplay';
 import LogsDisplay from './components/LogsDisplay';
 import ConfigurationPanel from './components/ConfigurationPanel';
+import ReferenceDataConfigDisplay from './components/ReferenceDataConfigDisplay';
 
 function App() {
   const [systemStatus, setSystemStatus] = useState('loading');
@@ -19,6 +24,7 @@ function App() {
   const [ingestionData, setIngestionData] = useState(null);    // object from /progress/{key}
   const [progressKey, setProgressKey] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);     // disable inputs while ingesting
+  const [refreshConfigTrigger, setRefreshConfigTrigger] = useState(0); // trigger for config refresh
 
   useEffect(() => {
     // Check system status and load configuration on startup
@@ -93,6 +99,13 @@ function App() {
           if (data.done || data.error) {
             console.log('Polling stopped - job completed:', data.done, 'error:', data.error);
             setIsProcessing(false);
+            
+            // Trigger Reference Data Configuration refresh if ingestion completed successfully
+            if (data.done && !data.error) {
+              console.log('Ingestion completed successfully - triggering Reference Data Config refresh');
+              setRefreshConfigTrigger(prev => prev + 1);
+            }
+            
             cancelled = true;
             if (intervalId) {
               clearInterval(intervalId);
@@ -126,49 +139,79 @@ function App() {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Header */}
-      <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Reference Data Auto Ingest System
-        </Typography>
-        <Typography variant="subtitle1" color="text.secondary">
-          Automated CSV data ingestion to SQL Server
-        </Typography>
-        
-        {systemStatus === 'loading' && (
-          <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
-            <CircularProgress size={20} sx={{ mr: 1 }} />
-            <Typography variant="body2">Checking system status...</Typography>
-          </Box>
-        )}
-        {systemStatus === 'healthy' && (
-          <Alert severity="success" sx={{ mt: 2, mb: 2 }}>
-            System is healthy and ready to process files
-          </Alert>
-        )}
-        {systemStatus === 'error' && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            System is not responding. Please check the backend service.
-          </Alert>
-        )}
-
-        {/* Inlined System Configuration (summary + expandable details) */}
-        {systemStatus === 'healthy' && config && (
-          <Box sx={{ mt: 2 }}>
-            <ConfigurationPanel config={config} />
-          </Box>
-        )}
-      </Paper>
-
-      {/* Main Content */}
-      {systemStatus === 'healthy' && config && (
-        <>
-          {/* File Upload Section */}
-          <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              File Upload & Configuration
+    <Box sx={{ flexGrow: 1, minHeight: '100vh', backgroundColor: 'background.default' }}>
+      {/* TD-Style Header */}
+      <AppBar position="static" elevation={0} sx={{ 
+        backgroundColor: 'primary.main',
+        borderBottom: '4px solid',
+        borderBottomColor: 'secondary.main'
+      }}>
+        <Toolbar>
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography variant="h5" component="h1" sx={{ 
+              fontWeight: 700, 
+              color: 'white',
+              letterSpacing: '0.5px'
+            }}>
+              TD Reference Data Management
             </Typography>
+            <Typography variant="body2" sx={{ 
+              color: 'rgba(255,255,255,0.9)',
+              mt: 0.5 
+            }}>
+              Automated CSV Data Ingestion System ***Limited For Reference Data Only***
+            </Typography>
+          </Box>
+        </Toolbar>
+      </AppBar>
+
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        {/* System Status Card */}
+        <Card sx={{ mb: 3 }}>
+          <CardContent sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom sx={{ color: 'text.primary', fontWeight: 600 }}>
+              System Status
+            </Typography>
+            
+            {systemStatus === 'loading' && (
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <CircularProgress size={20} sx={{ mr: 2, color: 'primary.main' }} />
+                <Typography variant="body2" color="text.secondary">Checking system status...</Typography>
+              </Box>
+            )}
+            {systemStatus === 'healthy' && (
+              <Alert severity="success" variant="filled" sx={{ 
+                backgroundColor: 'primary.main',
+                mb: 2,
+                borderRadius: 2
+              }}>
+                System is healthy and ready to process files
+              </Alert>
+            )}
+            {systemStatus === 'error' && (
+              <Alert severity="error" variant="filled" sx={{ borderRadius: 2 }}>
+                System is not responding. Please check the backend service.
+              </Alert>
+            )}
+
+            {/* System Configuration */}
+            {systemStatus === 'healthy' && config && (
+              <Box sx={{ mt: 2 }}>
+                <ConfigurationPanel config={config} />
+              </Box>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Main Content */}
+        {systemStatus === 'healthy' && config && (
+          <>
+            {/* File Upload Section */}
+            <Card sx={{ mb: 3 }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" gutterBottom sx={{ color: 'text.primary', fontWeight: 600 }}>
+                  File Upload & Configuration
+                </Typography>
             
             <FileUploadComponent
               config={config}
@@ -177,15 +220,17 @@ function App() {
               onIngestionProgress={() => { /* deprecated callback retained */ }}
               onProcessingComplete={handleProcessingComplete}
               disabled={isProcessing}
-            />
-          </Paper>
+                />
+              </CardContent>
+            </Card>
 
-          {/* Progress Display */}
-      {(uploadProgress !== null || ingestionData) && (
-            <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Processing Status
-              </Typography>
+            {/* Progress Display */}
+            {(uploadProgress !== null || ingestionData) && (
+              <Card sx={{ mb: 3 }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Typography variant="h6" gutterBottom sx={{ color: 'text.primary', fontWeight: 600 }}>
+                    Processing Status
+                  </Typography>
               
               <ProgressDisplay
                 uploadProgress={uploadProgress}
@@ -250,17 +295,34 @@ function App() {
                   setProgressKey(null);
                   setIsProcessing(false);
                 }}
-              />
-            </Paper>
-          )}
+                />
+                </CardContent>
+              </Card>
+            )}
 
-          {/* Logs Display */}
-          <Paper elevation={3} sx={{ p: 3 }}>
-            <LogsDisplay />
-          </Paper>
-        </>
-      )}
-    </Container>
+            {/* Reference Data Configuration Display */}
+            <Card sx={{ mb: 3 }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" gutterBottom sx={{ color: 'text.primary', fontWeight: 600 }}>
+                  Reference Data Configuration
+                </Typography>
+                <ReferenceDataConfigDisplay refreshTrigger={refreshConfigTrigger} />
+              </CardContent>
+            </Card>
+
+            {/* Logs Display */}
+            <Card>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" gutterBottom sx={{ color: 'text.primary', fontWeight: 600 }}>
+                  System Logs
+                </Typography>
+                <LogsDisplay />
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </Container>
+    </Box>
   );
 }
 
