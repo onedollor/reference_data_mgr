@@ -99,10 +99,6 @@ class DataIngester:
                 yield "Cancellation requested - stopping after format configuration"
                 raise Exception("Ingestion canceled by user")
 
-            # Check for cancellation before reading CSV
-            if progress_key and prog.is_canceled(progress_key):
-                yield "Cancellation requested - stopping before CSV read"
-                raise Exception("Ingestion canceled by user")
 
             # Step 4: Read and validate CSV file (always full read)
             yield "Reading CSV file..."
@@ -214,6 +210,13 @@ class DataIngester:
             if table_exists or stage_exists:
                 yield "Existing tables found, validating schema..."
 
+            backup_exists = self.db_manager.table_exists(connection, table_base_name + '_backup')
+            if backup_exists:
+                yield "Backup table exists, validating schema..."
+            else:
+                yield "No backup table found, creating new backup..."
+                self.db_manager.create_backup_table(connection, table_name, columns)
+            
             # Backup existing data BEFORE dropping table
             if existing_rows > 0 and load_mode == "full":
                 yield "Backing up existing data before table recreation..."
@@ -262,8 +265,7 @@ class DataIngester:
                 # Create new stage table
                 self.db_manager.create_table(connection, stage_table_name, columns, add_metadata_columns=True)
 
-            # Create backup table (idempotent)
-            self.db_manager.create_backup_table(connection, table_name, columns)
+
             self.db_manager.create_validation_procedure(connection, table_base_name)
             yield f"Database tables created/validated ({(time.perf_counter()-t_tables):.2f}s)"
             prog.update_progress(progress_key, stage='tables_ready')
