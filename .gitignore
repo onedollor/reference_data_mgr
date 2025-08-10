@@ -38,6 +38,9 @@ dist/
 C:\\data\\reference_data\\archive/
 C:\\data\\reference_data\\format/
 C:\\data\\reference_data\\temp/
+archive/
+format/
+temp/
 
 
 # CSV test outputs
