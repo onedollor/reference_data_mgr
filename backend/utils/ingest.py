@@ -706,6 +706,7 @@ class DataIngester:
                             value = prepare_value(row[col], col)
                             row_values.append(value)
                         cursor.execute(single_sql, row_values)
+                            
                     except Exception as e:
                         # Log detailed error information for debugging
                         error_details = f"Error at row {row_idx}: {str(e)}\n"
@@ -725,8 +726,11 @@ class DataIngester:
                     elapsed = time.perf_counter() - start_time
                     rate = inserted / elapsed if elapsed > 0 else 0
                     
-                # Add small delay for demo purposes (remove in production)
+                # CRITICAL: Yield control to event loop to allow cancel requests
                 import asyncio
+                await asyncio.sleep(0)  # Yield control to FastAPI event loop
+                
+                # Add small delay for demo purposes (remove in production)
                 if os.getenv("DEMO_SLOW_PROGRESS", "0") == "1":
                     await asyncio.sleep(0.5)  # Half second delay per batch for demonstration
                     
@@ -736,9 +740,11 @@ class DataIngester:
                     rate = inserted / elapsed if elapsed > 0 else 0
                     await self.logger.log_info(
                         "bulk_insert_progress",
-                        f"Inserted {inserted}/{total} rows ({rate:.0f} rows/s)"
+                        f"Inserted {inserted}/{total} rows ({rate:.0f} rows/s progress_key:{progress_key} prog.is_canceled:{prog.is_canceled(progress_key)})"
                     )
+
             connection.commit()
+
             if progress_key and prog.is_canceled(progress_key):
                 raise Exception("Ingestion canceled by user")
             elapsed_total = time.perf_counter() - start_time

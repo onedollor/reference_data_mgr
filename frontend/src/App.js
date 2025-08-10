@@ -79,7 +79,10 @@ function App() {
   useEffect(() => {
     if (!progressKey) return;
     let cancelled = false;
+    let intervalId = null;
+    
     const poll = async () => {
+      if (cancelled) return;
       try {
         const resp = await fetch(`/progress/${progressKey}`);
         if (!resp.ok) return;
@@ -88,20 +91,32 @@ function App() {
         if (data.found) {
           setIngestionData(data);
           if (data.done || data.error) {
+            console.log('Polling stopped - job completed:', data.done, 'error:', data.error);
             setIsProcessing(false);
+            cancelled = true;
+            if (intervalId) {
+              clearInterval(intervalId);
+              intervalId = null;
+            }
             return; // stop polling
           }
         }
       } catch (e) {
+        console.log('Poll error:', e);
         // swallow errors; next tick may succeed
       }
     };
-    // immediate poll then interval
+    
+    // immediate poll then interval (2 seconds for reduced server load)
     poll();
-    const id = setInterval(poll, 1000);
+    intervalId = setInterval(poll, 2000);
+    
     return () => {
       cancelled = true;
-      clearInterval(id);
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
     };
   }, [progressKey]);
 
@@ -176,9 +191,57 @@ function App() {
                 uploadProgress={uploadProgress}
                 ingestionData={ingestionData}
                 progressKey={progressKey}
-                onCancel={async () => {
-                  if (!progressKey) return;
-                  try { await fetch(`/progress/${progressKey}/cancel`, { method: 'POST' }); } catch(e) { /* ignore */ }
+                onCancel={() => {
+                  if (!progressKey) {
+                    console.log('Cancel clicked but no progressKey');
+                    return;
+                  }
+                  console.log('Sending IMMEDIATE cancel request for progressKey:', progressKey, 'at', new Date().toISOString());
+                  
+                  // Immediately update local state to show cancellation is in progress
+                  setIngestionData(prev => ({
+                    ...prev,
+                    canceled: true,
+                    stage: 'canceling',
+                    error: 'Cancellation requested'
+                  }));
+
+                  // Use XMLHttpRequest to bypass browser fetch queuing
+                  const xhr = new XMLHttpRequest();
+                  xhr.open('POST', `/progress/${progressKey}/cancel`, true);
+                  xhr.onload = function() {
+                    console.log('Cancel XHR response status:', xhr.status, 'at', new Date().toISOString());
+                    console.log('Cancel XHR response:', xhr.responseText);
+                  };
+                  xhr.onerror = function() {
+                    console.log('Cancel XHR request failed at', new Date().toISOString());
+                  };
+                  xhr.send();
+                  
+                  // DIRECT backend connection bypassing frontend proxy
+                  const directXhr = new XMLHttpRequest();
+                  directXhr.open('POST', `http://localhost:8000/progress/${progressKey}/cancel`, true);
+                  directXhr.onload = function() {
+                    console.log('DIRECT Cancel XHR response status:', directXhr.status, 'at', new Date().toISOString());
+                    console.log('DIRECT Cancel XHR response:', directXhr.responseText);
+                  };
+                  directXhr.onerror = function() {
+                    console.log('DIRECT Cancel XHR request failed at', new Date().toISOString());
+                  };
+                  directXhr.send();
+                  
+                  // Also try a backup fetch with different URL to force new connection
+                  setTimeout(() => {
+                    fetch(`/progress/${progressKey}/cancel?t=${Date.now()}`, { 
+                      method: 'POST',
+                      cache: 'no-cache',
+                      keepalive: false
+                    }).then(response => {
+                      console.log('Backup cancel response:', response.status, 'at', new Date().toISOString());
+                    }).catch(e => {
+                      console.log('Backup cancel failed:', e);
+                    });
+                  }, 10);
                 }}
                 onReset={() => {
                   // Reset all progress states

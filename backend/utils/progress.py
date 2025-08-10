@@ -44,6 +44,9 @@ def mark_error(key: str, message: str):
 def mark_done(key: str):
     update_progress(key, done=True, stage='completed', percent=100.0)
 
+def mark_canceled(key: str, message: str = "Canceled by user"):
+    update_progress(key, done=True, stage='canceled', error=message, percent=100.0, canceled=True)
+
 def request_cancel(key: str):
     with _lock:
         _cancel_flags[key] = True

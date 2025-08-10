@@ -352,7 +352,14 @@ async def ingest_data_background(
             await logger.log_info("background_ingestion", f"Progress: {progress}")
             
     except Exception as e:
-        await logger.log_error("ingest_data_background", str(e), traceback.format_exc())
+        # Check if this is a cancellation exception
+        if "canceled by user" in str(e).lower():
+            # Mark progress as canceled
+            progress_key = re.sub(r'[^a-zA-Z0-9_]', '_', filename)
+            prog.mark_canceled(progress_key, str(e))
+            await logger.log_info("ingest_data_background", f"Ingestion canceled: {str(e)}")
+        else:
+            await logger.log_error("ingest_data_background", str(e), traceback.format_exc())
 
 async def ingest_data_stream(
     file_path: str, 
@@ -398,9 +405,13 @@ async def get_progress(key: str):
 @app.post("/progress/{key}/cancel")
 async def cancel_ingestion(key: str):
     """Request cancellation of an in-flight ingestion."""
-    await logger.log_info("cancel_request", f"Cancellation requested for progress key: {key}")
+    import time
+    timestamp = time.strftime("%H:%M:%S.%f")[:-3]  # HH:MM:SS.mmm
+    await logger.log_info("cancel_request", f"[{timestamp}] Cancellation requested for progress key: {key}")
     prog.request_cancel(key)
-    return {"message": "cancel requested", "key": key}
+    current_progress = prog.get_progress(key)
+    await logger.log_info("cancel_status", f"[{timestamp}] Progress after cancel request: {current_progress}")
+    return {"message": "cancel requested", "key": key, "timestamp": timestamp}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
