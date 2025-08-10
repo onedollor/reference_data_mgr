@@ -257,9 +257,8 @@ class DatabaseManager:
         cursor.execute(create_sql)
     
     def create_backup_table(self, connection: pyodbc.Connection, table_name: str, columns: List[Dict[str, str]]) -> None:
-        """Create a backup table with version tracking (only if it doesn't exist)"""
+        """Create a backup table with version tracking, validating schema compatibility"""
         backup_table_name = f"{table_name}_backup"
-        
         cursor = connection.cursor()
         
         # Check if backup table already exists
@@ -269,9 +268,24 @@ class DatabaseManager:
             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
         """, self.backup_schema, backup_table_name)
         
-        if cursor.fetchone()[0] > 0:
-            # Backup table already exists, don't recreate it
-            return
+        backup_exists = cursor.fetchone()[0] > 0
+        
+        if backup_exists:
+            # Validate schema compatibility
+            if self._backup_schema_matches(connection, backup_table_name, columns):
+                # Schema matches, backup table is compatible
+                return
+            else:
+                # Schema doesn't match, rename existing backup table and create new one
+                timestamp_suffix = self._get_timestamp_suffix()
+                old_backup_name = f"{backup_table_name}_{timestamp_suffix}"
+                
+                # Rename existing backup table
+                rename_sql = (
+                    "EXEC sp_rename '[" + self.backup_schema + "].[" + backup_table_name + "]', '" + old_backup_name + "'"
+                )
+                cursor.execute(rename_sql)
+                print(f"INFO: Renamed incompatible backup table {backup_table_name} to {old_backup_name}")
         
         # Build column definitions (same as main table)
         column_defs = []
@@ -285,50 +299,94 @@ class DatabaseManager:
             "[version_id] int NOT NULL"
         ])
         
-        # Create the backup table
-        create_sql = f"""
-            CREATE TABLE [{self.backup_schema}].[{backup_table_name}] (
-                {', '.join(column_defs)}
-            )
-        """
-        
+        # Create the backup table with proper schema quoting
+        create_sql = (
+            "CREATE TABLE [" + self.backup_schema + "].[" + backup_table_name + "] (" +
+            ', '.join(column_defs) + ")"
+        )
         cursor.execute(create_sql)
     
+    def _backup_schema_matches(self, connection: pyodbc.Connection, backup_table_name: str, expected_columns: List[Dict[str, str]]) -> bool:
+        """Check if existing backup table schema matches expected columns"""
+        try:
+            # Get existing backup table columns (excluding metadata columns)
+            existing_columns = self.get_table_columns(connection, backup_table_name, self.backup_schema)
+            
+            # Filter out backup-specific metadata columns
+            data_columns = [col for col in existing_columns 
+                           if col['name'] not in ['ref_data_loadtime', 'version_id']]
+            
+            # Create comparison sets (normalize data types)
+            expected_set = set()
+            for col in expected_columns:
+                col_name = col['name'].lower()
+                col_type = self._normalize_data_type(col['data_type'])
+                expected_set.add((col_name, col_type))
+            
+            existing_set = set()
+            for col in data_columns:
+                col_name = col['name'].lower()
+                col_type = self._normalize_data_type(col['data_type'], col.get('max_length'))
+                existing_set.add((col_name, col_type))
+            
+            return expected_set == existing_set
+            
+        except Exception as e:
+            # If we can't validate schema, assume it doesn't match to be safe
+            print(f"WARNING: Could not validate backup table schema: {str(e)}")
+            return False
+    
+    def _normalize_data_type(self, data_type: str, max_length: int = None) -> str:
+        """Normalize data type for comparison (handle varchar length variations)"""
+        data_type = data_type.lower().strip()
+        
+        # Handle varchar with lengths
+        if data_type.startswith('varchar'):
+            if max_length == -1:
+                return 'varchar(max)'
+            elif max_length is not None:
+                return f'varchar({max_length})'
+            else:
+                # Extract length from data_type string if present
+                import re
+                match = re.search(r'varchar\((\d+|max)\)', data_type, re.IGNORECASE)
+                if match:
+                    return f'varchar({match.group(1).lower()})'
+                else:
+                    return 'varchar(4000)'  # Default fallback
+        
+        return data_type
+    
+    def _get_timestamp_suffix(self) -> str:
+        """Generate timestamp suffix in format yyyyMMddHHmmss"""
+        from datetime import datetime
+        return datetime.now().strftime('%Y%m%d%H%M%S')
+    
     def create_validation_procedure(self, connection: pyodbc.Connection, table_name: str) -> None:
-        """Create a validation stored procedure for the table"""
+        """Ensure a validation stored procedure exists for the table.
+        Will NOT drop/recreate if it already exists (idempotent)."""
         proc_name = f"sp_ref_validate_{table_name}"
-        
         cursor = connection.cursor()
-        
-        # Drop procedure if it exists - use parameterized query
+
+        # Create only if missing
         cursor.execute("""
-            IF EXISTS (SELECT * FROM sys.objects WHERE type = 'P' AND name = ?)
+            IF NOT EXISTS (SELECT * FROM sys.objects WHERE type = 'P' AND name = ?)
             BEGIN
-                DECLARE @sql NVARCHAR(MAX) = N'DROP PROCEDURE [' + ? + '].[' + ? + ']'
+                DECLARE @sql NVARCHAR(MAX) = N'
+                CREATE PROCEDURE [' + ? + '].[' + ? + ']
+                AS
+                BEGIN
+                    SET NOCOUNT ON;
+                    DECLARE @validation_result NVARCHAR(MAX);
+                    SET @validation_result = N''{
+                        "validation_result": 0,
+                        "validation_issue_list": []
+                    }'';
+                    SELECT @validation_result AS ValidationResult;
+                END'
                 EXEC sp_executesql @sql
             END
         """, proc_name, self.validation_sp_schema, proc_name)
-        
-        # Create the validation procedure (empty template)
-        proc_sql = f"""
-            CREATE PROCEDURE [{self.validation_sp_schema}].[{proc_name}]
-            AS
-            BEGIN
-                -- Validation logic to be implemented by users
-                -- This is a template procedure that returns success by default
-                
-                DECLARE @validation_result NVARCHAR(MAX)
-                
-                SET @validation_result = N'{{
-                    "validation_result": 0,
-                    "validation_issue_list": []
-                }}'
-                
-                SELECT @validation_result AS ValidationResult
-            END
-        """
-        
-        cursor.execute(proc_sql)
     
     def execute_validation_procedure(self, connection: pyodbc.Connection, table_name: str) -> Dict[str, Any]:
         """Execute the validation stored procedure and return results"""

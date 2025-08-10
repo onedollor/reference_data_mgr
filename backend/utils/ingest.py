@@ -265,7 +265,8 @@ class DataIngester:
                 # Create new stage table
                 self.db_manager.create_table(connection, stage_table_name, columns, add_metadata_columns=True)
 
-
+            # Create/validate backup table with schema compatibility check
+            self.db_manager.create_backup_table(connection, table_name, columns)
             self.db_manager.create_validation_procedure(connection, table_base_name)
             yield f"Database tables created/validated ({(time.perf_counter()-t_tables):.2f}s)"
             prog.update_progress(progress_key, stage='tables_ready')
