@@ -118,12 +118,16 @@ const ProgressDisplay = ({ uploadProgress, ingestionData, progressKey, onCancel,
           />
           <Typography variant="body2" sx={{ mb: 1 }}>
             {ingestionData.canceled ? 'Canceled by user' : ingestionData.error ? `Error: ${ingestionData.error}` : (
-              ingestionData.done ? 'Completed' : `Stage: ${ingestionData.stage}${ingestionData.total ? ` • ${ingestionData.percent}%` : ''}`
+              ingestionData.done ? 'Completed' : `Stage: ${ingestionData.stage}${
+                ingestionData.stage === 'inserting' && ingestionData.total ? 
+                  ` • ${ingestionData.percent}% (${ingestionData.inserted?.toLocaleString()}/${ingestionData.total.toLocaleString()} rows)` :
+                  ingestionData.total ? ` • ${ingestionData.percent}%` : ''
+              }`
             )}
           </Typography>
-          {ingestionData.total && (
+          {ingestionData.total && ingestionData.inserted !== undefined && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-              Rows: {ingestionData.inserted}/{ingestionData.total}
+              Rows: {ingestionData.inserted.toLocaleString()}/{ingestionData.total.toLocaleString()}
             </Typography>
           )}
           {ingestionData.error && (
