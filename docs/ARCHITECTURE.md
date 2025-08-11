@@ -1,371 +1,445 @@
-# System Architecture Documentation
+# Architecture Documentation - Reference Data Auto Ingest System
 
-## Overview
+## System Overview
 
-The Reference Data Auto Ingest System is a modern, scalable web application built with a multi-tier architecture. It provides automated CSV data ingestion capabilities with real-time progress tracking, comprehensive validation, and enterprise-grade security features.
+The Reference Data Auto Ingest System is a modern, production-ready application built with a FastAPI backend and React frontend. It provides automated CSV data ingestion with intelligent load type management, comprehensive backup/rollback capabilities, and real-time progress monitoring.
 
 ## High-Level Architecture
 
-```mermaid
-graph TB
-    subgraph "Client Tier"
-        UI[React Web Interface]
-        MOBILE[Mobile Browser]
-    end
-    
-    subgraph "Application Tier"
-        API[FastAPI Backend]
-        BG[Background Tasks]
-        SSE[Server-Sent Events]
-    end
-    
-    subgraph "Data Processing"
-        CSV[CSV Detector]
-        FILE[File Handler]
-        INGEST[Data Ingester]
-        VALID[Validator]
-    end
-    
-    subgraph "Storage Tier"
-        DB[(SQL Server)]
-        FILES[File System]
-        LOGS[Log Files]
-    end
-    
-    UI --> API
-    MOBILE --> API
-    API --> BG
-    API --> SSE
-    BG --> CSV
-    BG --> FILE
-    BG --> INGEST
-    INGEST --> VALID
-    INGEST --> DB
-    FILE --> FILES
-    API --> LOGS
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  React Frontend │    │ FastAPI Backend │    │  SQL Server DB  │
+│   (Port 3000)   │◄──►│   (Port 8000)   │◄──►│   (Port 1433)   │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         │                       │                       │
+    ┌────▼────┐             ┌────▼────┐             ┌────▼────┐
+    │Material │             │ FastAPI │             │Schemas: │
+    │UI + Load│             │Async +  │             │ref, bkp │
+    │Type Mgmt│             │Backup   │             │dbo      │
+    └─────────┘             └─────────┘             └─────────┘
 ```
 
-## Component Architecture
+## Enhanced Component Architecture
 
-### Frontend Tier (React)
+### Frontend Architecture (React)
 
-#### Technology Stack
-- **React 18.x** - Modern React with hooks and concurrent features
-- **Material-UI 5.x** - Enterprise-grade UI component library
-- **Axios** - HTTP client for API communication
-- **Create React App** - Build toolchain and development environment
-
-#### Component Structure
+#### Component Hierarchy
 ```
-src/
-├── App.js                          # Main application component
-├── components/
-│   ├── FileUploadComponent.js      # Drag & drop file upload
-│   ├── ConfigurationPanel.js       # CSV format configuration
-│   ├── ProgressDisplay.js          # Real-time progress monitoring
-│   └── LogsDisplay.js              # System logs viewer
-└── index.js                        # Application entry point
+App.js
+├── FileUploadComponent.js
+│   ├── LoadTypeWarningDialog.js (NEW - Load type mismatch handling)
+│   ├── Load type verification workflow
+│   └── Enhanced upload with override capabilities
+├── RollbackManager.js (NEW - Comprehensive backup management)
+│   ├── Backup table listing with status validation
+│   ├── Version management and preview
+│   ├── Advanced filtering (regex + discrete values)
+│   ├── Export functionality (main + backup versions)
+│   └── Rollback confirmation and execution
+├── ProgressDisplay.js
+├── LogsDisplay.js  
+├── ConfigurationPanel.js
+└── ReferenceDataConfigDisplay.js
 ```
 
-#### Key Features
-- **Responsive Design**: Material-UI responsive grid system
-- **Real-time Updates**: Server-Sent Events for progress streaming
-- **Progressive Enhancement**: Works on mobile and desktop
-- **Error Handling**: User-friendly error display with technical details
-- **Auto-refresh**: Automatic log refresh with configurable intervals
+#### Key Frontend Enhancements
+- **Load Type Intelligence**: Pre-upload verification prevents conflicts
+- **Warning Dialog System**: User-friendly override selection with explanations
+- **Advanced Backup Management**: Complete rollback interface with data preview
+- **Export Capabilities**: CSV export of main tables and backup versions
+- **Enhanced Filtering**: Multi-column filtering with regex and discrete value support
+- **TD Bank Styling**: Corporate design system integration
 
-#### State Management
+#### Load Type Management Workflow
 ```javascript
-// Component state management with React hooks
-const [uploadState, setUploadState] = useState({
-  file: null,
-  progress: 0,
-  status: 'idle', // idle, uploading, processing, complete, error
-  logs: [],
-  config: {}
-});
+// Load Type Verification Flow
+const handleUpload = async (file, config) => {
+  // 1. Verify load type compatibility
+  const verification = await fetch('/verify-load-type', {
+    method: 'POST',
+    body: new FormData([
+      ['filename', file.name],
+      ['load_mode', config.load_mode]
+    ])
+  });
+  
+  // 2. Handle mismatch detection
+  if (verification.has_mismatch) {
+    setLoadTypeVerification(verification);
+    setShowLoadTypeDialog(true);
+    return;
+  }
+  
+  // 3. Proceed with normal upload
+  proceedWithUpload(file, config);
+};
 
-// Real-time progress via Server-Sent Events
-useEffect(() => {
-  const eventSource = new EventSource(`/ingest/${filename}`);
-  eventSource.onmessage = (event) => {
-    setUploadState(prev => ({
-      ...prev,
-      progress: parseProgress(event.data)
-    }));
+// Override handling
+const handleLoadTypeOverride = (overrideType) => {
+  const uploadData = {
+    ...pendingUploadData,
+    override_load_type: overrideType
   };
-}, [filename]);
+  proceedWithUpload(uploadData);
+};
 ```
 
-### Backend Tier (FastAPI)
+### Backend Architecture (FastAPI)
 
-#### Technology Stack
-- **FastAPI** - Modern async web framework with automatic OpenAPI
-- **Uvicorn** - High-performance ASGI server
-- **Pydantic** - Data validation using Python type annotations
-- **python-multipart** - Multipart form data handling
-- **aiofiles** - Async file operations
-
-#### Core Architecture
-```python
-# Main FastAPI application structure
-app = FastAPI(
-    title="Reference Data Auto Ingest System",
-    description="Automated reference data ingestion from CSV files to SQL Server",
-    version="1.0.0"
-)
-
-# Middleware stack
-app.add_middleware(CORSMiddleware, ...)  # CORS handling
-# Custom error handling middleware
-# Request logging middleware
-# Security headers middleware
+#### Enhanced Application Structure
+```
+backend/
+├── app/
+│   └── main.py              # Enhanced with load type & backup endpoints
+├── utils/
+│   ├── database.py          # Enhanced with load type logic & backup operations
+│   ├── ingest.py           # Enhanced with load type tracking
+│   ├── file_handler.py     # Enhanced filename processing
+│   ├── csv_detector.py     # CSV format detection
+│   ├── logger.py           # Comprehensive logging
+│   └── progress.py         # Progress tracking
+└── tests/                   # Enhanced test suites
 ```
 
-#### Endpoint Categories
+#### New API Endpoints
 
-##### System Endpoints
-- `GET /` - Health check and system status
-- `GET /config` - System configuration
-- `GET /features` - Feature flags and capabilities
-
-##### File Processing Endpoints  
-- `POST /detect-format` - Auto-detect CSV format
-- `POST /upload` - File upload with background processing
-- `POST /ingest/{filename}` - Stream ingestion progress
-- `GET /progress/{key}` - Progress status polling
-
-##### Database Endpoints
-- `GET /schema/{table_name}` - Table schema information
-- `GET /db/pool-stats` - Connection pool statistics
-
-##### Monitoring Endpoints
-- `GET /logs` - System logs with no-cache headers
-
-#### Async Processing Model
+##### Load Type Management
 ```python
-# Background task processing
-@app.post("/upload")
-async def upload_file(background_tasks: BackgroundTasks, ...):
-    # Immediate file validation and save
-    temp_path = await file_handler.save_uploaded_file(file, ...)
+@app.post("/verify-load-type")
+async def verify_load_type(filename: str = Form(...), load_mode: str = Form(...)):
+    """
+    Verify load type compatibility:
+    1. Extract table name from filename
+    2. Determine load type based on existing data
+    3. Compare with requested load mode
+    4. Return mismatch information if needed
+    """
+    table_name = file_handler.extract_table_base_name(filename)
+    current_load_type = db_manager.determine_load_type(connection, table_name, load_mode)
+    requested_load_type = 'F' if load_mode == 'full' else 'A'
     
-    # Start background ingestion
+    return {
+        "table_name": table_name,
+        "determined_load_type": current_load_type,
+        "requested_load_type": requested_load_type,
+        "has_mismatch": current_load_type != requested_load_type,
+        "existing_load_types": get_existing_load_types(connection, table_name),
+        "explanation": generate_explanation(current_load_type, requested_load_type)
+    }
+```
+
+##### Backup Management
+```python
+@app.get("/backups")
+async def list_backups():
+    """List backup tables with validation of related main/stage tables"""
+    
+@app.get("/backups/{base_name}/versions")
+async def get_backup_versions(base_name: str):
+    """Get all versions for a backup table"""
+    
+@app.get("/backups/{base_name}/versions/{version_id}")
+async def view_backup_version(base_name: str, version_id: int, limit: int = 50):
+    """View specific backup version data with pagination"""
+    
+@app.post("/backups/{base_name}/rollback/{version_id}")
+async def rollback_backup_version(base_name: str, version_id: int):
+    """Rollback main table to specific backup version"""
+    
+@app.get("/backups/{base_name}/export-main")
+async def export_main_table_csv(base_name: str):
+    """Export current main table data as CSV with streaming download"""
+    
+@app.get("/backups/{base_name}/versions/{version_id}/export")
+async def export_backup_version_csv(base_name: str, version_id: int):
+    """Export specific backup version as CSV"""
+```
+
+#### Enhanced Upload Endpoint
+```python
+@app.post("/upload")
+async def upload_file(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    # ... existing parameters ...
+    override_load_type: Optional[str] = Form(None)  # NEW: Load type override
+):
+    """Enhanced upload with load type override support"""
+    
+    # Start background ingestion with override
     background_tasks.add_task(
         ingest_data_background,
-        temp_path, fmt_path, load_mode, filename
+        temp_file_path, fmt_file_path, load_mode, file.filename,
+        override_load_type  # Pass override to ingestion process
     )
-    
-    return {"status": "processing", "progress_key": key}
-
-# Server-Sent Events for real-time progress
-async def ingest_data_stream(...):
-    async for progress in ingester.ingest_data(...):
-        yield f"data: {progress}\n\n"
 ```
 
-### Data Processing Layer
+### Database Architecture Enhancements
 
-#### CSV Format Detection
-```python
-class CSVFormatDetector:
-    """Intelligent CSV format detection with confidence scoring"""
-    
-    def detect_format(self, file_path: str) -> Dict[str, Any]:
-        """
-        Analyze CSV file to detect:
-        - Column delimiter (, ; | \t)
-        - Row delimiter (\r \n \r\n custom)
-        - Text qualifier (" ' "")
-        - Header presence
-        - Trailer patterns
-        - Encoding detection
-        """
-        
-        # Multi-stage detection algorithm
-        sample_data = self._read_sample(file_path)
-        
-        # Delimiter detection with frequency analysis
-        delimiters = self._detect_delimiters(sample_data)
-        
-        # Header/trailer pattern recognition
-        structure = self._analyze_structure(sample_data)
-        
-        # Confidence scoring
-        confidence = self._calculate_confidence(delimiters, structure)
-        
-        return {
-            "column_delimiter": delimiters["column"],
-            "row_delimiter": delimiters["row"], 
-            "text_qualifier": delimiters["text"],
-            "has_header": structure["has_header"],
-            "has_trailer": structure["has_trailer"],
-            "trailer_pattern": structure["trailer_pattern"],
-            "confidence": confidence,
-            "sample_data": sample_data[:3]
-        }
-```
-
-#### Data Ingestion Pipeline
-```python
-class DataIngester:
-    """Main data ingestion orchestrator"""
-    
-    async def ingest_data(self, file_path, fmt_path, load_mode, filename):
-        """
-        Complete ingestion pipeline:
-        1. File format parsing
-        2. Table schema creation/validation
-        3. Data type inference (optional)
-        4. Batch data loading
-        5. Validation execution
-        6. Archive and cleanup
-        """
-        
-        # Progress tracking initialization
-        progress_key = self._sanitize_progress_key(filename)
-        prog.init_progress(progress_key)
-        
-        try:
-            # Stage 1: Parse CSV format
-            yield "Reading format configuration..."
-            format_config = await self.file_handler.read_format_file(fmt_path)
-            
-            # Stage 2: Database preparation
-            yield "Preparing database schema..."
-            await self._prepare_database_schema(table_name, load_mode)
-            
-            # Stage 3: Data processing
-            yield "Processing CSV data..."
-            async for batch_progress in self._process_csv_batches(file_path, format_config):
-                yield batch_progress
-            
-            # Stage 4: Validation
-            yield "Running data validation..."
-            validation_result = await self._run_validation(table_name)
-            
-            # Stage 5: Finalization
-            yield "Finalizing ingestion..."
-            await self._finalize_ingestion(file_path, table_name, load_mode)
-            
-            yield "Ingestion completed successfully"
-            
-        except Exception as e:
-            yield f"ERROR: {str(e)}"
-            raise
-```
-
-#### Database Schema Management
-```python
-class DatabaseManager:
-    """Database operations with security hardening"""
-    
-    def ensure_table_schema(self, table_name: str, columns: List[Dict]) -> None:
-        """
-        Create or update table schema:
-        - Main table: [data_schema].[table_name]
-        - Stage table: [data_schema].[table_name_stage]  
-        - Backup table: [backup_schema].[table_name_backup]
-        """
-        
-        # Parameterized DDL generation
-        main_table_sql = self._generate_table_ddl(
-            schema=self.data_schema,
-            table=table_name, 
-            columns=columns,
-            include_load_time=True
-        )
-        
-        stage_table_sql = self._generate_table_ddl(
-            schema=self.data_schema,
-            table=f"{table_name}_stage",
-            columns=columns
-        )
-        
-        backup_table_sql = self._generate_table_ddl(
-            schema=self.backup_schema,
-            table=f"{table_name}_backup", 
-            columns=columns + [{"name": "version_id", "type": "int"}]
-        )
-        
-        # Execute with proper error handling
-        conn = self.get_connection()
-        try:
-            conn.execute(main_table_sql)
-            conn.execute(stage_table_sql)  
-            conn.execute(backup_table_sql)
-            conn.commit()
-        except Exception as e:
-            conn.rollback()
-            raise e
-        finally:
-            conn.close()
-```
-
-### Database Tier Architecture
-
-#### Schema Design
-
+#### Enhanced Schema Design
 ```sql
--- Multi-schema approach for data organization
-USE [reference_data_db];
-
--- Main data schema
-CREATE SCHEMA [ref];  -- Production tables and stored procedures
-CREATE SCHEMA [bkp];  -- Backup tables with versioning
-
--- Table structure pattern
-CREATE TABLE [ref].[{table_name}] (
-    -- User data columns (all varchar for flexibility)
-    [column_1] varchar(4000),
-    [column_2] varchar(4000),
-    [column_n] varchar(4000),
-    
-    -- System columns
+-- Enhanced table structure with load type support
+CREATE TABLE [ref].[airports] (
+    [code] varchar(4000),
+    [name] varchar(4000),
+    [city] varchar(4000),
+    [country] varchar(4000),
+    [loadtype] varchar(255),        -- NEW: Load type tracking ('F'/'A')
     [ref_data_loadtime] datetime DEFAULT GETDATE()
 );
 
--- Stage table for validation
-CREATE TABLE [ref].[{table_name}_stage] (
-    -- Identical structure to main table
-    -- Used for data validation before promotion
+-- Enhanced backup table with version control
+CREATE TABLE [bkp].[airports_backup] (
+    [code] varchar(4000),
+    [name] varchar(4000),
+    [city] varchar(4000), 
+    [country] varchar(4000),
+    [loadtype] varchar(255),        -- Preserved from original
+    [ref_data_loadtime] datetime,   -- Static timestamp from backup time
+    [version_id] int NOT NULL       -- Version identifier
 );
 
--- Backup table with versioning
-CREATE TABLE [bkp].[{table_name}_backup] (
-    -- Main table structure plus versioning
-    [version_id] int NOT NULL,
-    [backup_timestamp] datetime DEFAULT GETDATE()
+-- System configuration table
+CREATE TABLE [dbo].[Reference_Data_Cfg] (
+    [sp_name] varchar(255),
+    [ref_name] varchar(255),
+    [source_db] varchar(255),
+    [source_schema] varchar(255), 
+    [source_table] varchar(255),
+    [is_enabled] bit
 );
-
--- Validation stored procedures
-CREATE PROCEDURE [ref].[sp_ref_validate_{table_name}]
-AS
-BEGIN
-    -- Custom validation logic (configurable)
-    -- Returns JSON validation results
-    SELECT '{"validation_result": 0, "validation_issue_list": []}' AS ValidationResult;
-END
 ```
 
-#### Connection Management
+#### Load Type Determination Logic
+```python
+def determine_load_type(self, connection: pyodbc.Connection, table_name: str, 
+                       current_load_mode: str, override_load_type: str = None) -> str:
+    """
+    Enhanced load type determination with override support:
+    
+    Rules:
+    1. If override_load_type provided: Use override ('F' or 'A')
+    2. First time ingest: Use current load mode ('F' for full, 'A' for append)
+    3. Subsequent ingests: Check existing distinct loadtype values
+       - Only 'F' exists: Use 'F'
+       - Only 'A' exists: Use 'A'
+       - Both 'A' and 'F' exist: Use 'F'
+    """
+    
+    # Priority 1: User override
+    if override_load_type:
+        override_upper = override_load_type.strip().upper()
+        if override_upper in ['F', 'A', 'FULL', 'APPEND']:
+            return 'F' if override_upper in ['F', 'FULL'] else 'A'
+    
+    # Priority 2: Existing data analysis
+    if not self.table_exists(connection, table_name):
+        return 'F' if current_load_mode == 'full' else 'A'
+    
+    # Get existing load types
+    cursor = connection.cursor()
+    query = f"SELECT DISTINCT [loadtype] FROM [{self.data_schema}].[{table_name}] WHERE [loadtype] IS NOT NULL"
+    cursor.execute(query)
+    existing_types = {row[0].strip().upper() for row in cursor.fetchall() if row[0]}
+    
+    # Apply business rules
+    if not existing_types:
+        return 'F' if current_load_mode == 'full' else 'A'
+    elif 'F' in existing_types and 'A' in existing_types:
+        return 'F'  # Mixed data defaults to Full
+    elif 'F' in existing_types:
+        return 'F'  # Maintain Full load type
+    elif 'A' in existing_types:
+        return 'A'  # Maintain Append load type
+    
+    return 'F'  # Default fallback
+```
+
+#### Backup and Version Management
+```python
+def rollback_to_version(self, connection: pyodbc.Connection, base_name: str, version_id: int) -> Dict:
+    """
+    Rollback main table to specific backup version:
+    1. Validate backup version exists
+    2. Clear current main table data
+    3. Copy backup version data to main table
+    4. Preserve static timestamps
+    5. Update version tracking
+    """
+    
+    cursor = connection.cursor()
+    
+    # Validate version exists
+    backup_table = f"{base_name}_backup"
+    cursor.execute(
+        "SELECT COUNT(*) FROM [" + self.backup_schema + "].[" + backup_table + "] WHERE version_id = ?",
+        version_id
+    )
+    
+    if cursor.fetchone()[0] == 0:
+        return {"status": "error", "error": f"Version {version_id} not found"}
+    
+    # Clear main table
+    cursor.execute(f"DELETE FROM [{self.data_schema}].[{base_name}]")
+    
+    # Copy backup data (excluding version_id)
+    columns_query = f"SELECT column_name FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = '{backup_table}' AND column_name != 'version_id'"
+    cursor.execute(columns_query)
+    columns = [row[0] for row in cursor.fetchall()]
+    
+    column_list = ", ".join(f"[{col}]" for col in columns)
+    insert_sql = f"""
+        INSERT INTO [{self.data_schema}].[{base_name}] ({column_list})
+        SELECT {column_list} 
+        FROM [{self.backup_schema}].[{backup_table}] 
+        WHERE version_id = ?
+    """
+    cursor.execute(insert_sql, version_id)
+    
+    rows_copied = cursor.rowcount
+    connection.commit()
+    
+    return {
+        "status": "success",
+        "main_rows": rows_copied,
+        "stage_rows": rows_copied,
+        "version_restored": version_id
+    }
+```
+
+## Data Flow Architecture
+
+### Enhanced Ingestion Pipeline
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│File Upload  │    │Load Type    │    │Format       │    │Schema       │
+│& Validation │───►│Verification │───►│Detection    │───►│Preparation  │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+       │                   │                   │                   │
+       ▼                   ▼                   ▼                   ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│Override     │    │Data Loading │    │Validation   │    │Data Movement│
+│Decision     │───►│to Stage     │───►│& Processing │───►│& Backup     │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+                           │                   │                   │
+                           ▼                   ▼                   ▼
+                   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+                   │Progress     │    │Error        │    │Archive &    │
+                   │Tracking     │    │Handling     │    │Cleanup      │
+                   └─────────────┘    └─────────────┘    └─────────────┘
+```
+
+### Load Type Management Flow
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│User Selects │    │System       │    │Mismatch     │    │User Override│
+│File & Mode  │───►│Determines   │───►│Detection    │───►│Decision     │
+└─────────────┘    │Load Type    │    └─────────────┘    └─────────────┘
+       │            └─────────────┘           │                   │
+       │                   │                 │                   │
+       ▼                   ▼                 ▼                   ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│filename.csv │    │Check Existing│    │Show Warning │    │Force Load   │
+│load_mode=   │    │Load Types & │    │Dialog with  │    │Type Override│
+│full/append  │    │Apply Rules  │    │Explanation  │    │in Upload    │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+```
+
+### Backup and Rollback Flow
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│Full Load    │    │Create Backup│    │Version      │    │Rollback     │
+│Triggered    │───►│Before       │───►│Control      │───►│Selection    │
+└─────────────┘    │Replacement  │    │Tracking     │    └─────────────┘
+       │            └─────────────┘    └─────────────┘           │
+       │                   │                   │                │
+       ▼                   ▼                   ▼                ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│Main Table   │    │Backup Table │    │Increment    │    │Replace Main │
+│Data         │    │with Static  │    │version_id   │    │with Selected│
+│Replacement  │    │Timestamps   │    │Counter      │    │Version Data │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+```
+
+## Security Architecture
+
+### Enhanced Security Model
+
+#### 1. Input Validation Layer
+```python
+# Load type validation
+def validate_load_type(load_type: str) -> str:
+    """Validate and sanitize load type input"""
+    if not load_type:
+        return None
+    
+    clean_type = load_type.strip().upper()
+    if clean_type not in ['F', 'A', 'FULL', 'APPEND']:
+        raise ValueError(f"Invalid load type: {load_type}")
+    
+    return 'F' if clean_type in ['F', 'FULL'] else 'A'
+
+# Table name sanitization for backup operations
+def sanitize_base_name(base_name: str) -> str:
+    """Sanitize base name for backup operations"""
+    if not re.fullmatch(r"[A-Za-z0-9_]+", base_name):
+        raise ValueError(f"Invalid base name: {base_name}")
+    return base_name
+```
+
+#### 2. Parameterized Query Examples
+```python
+# Load type determination query
+query = "SELECT DISTINCT [loadtype] FROM [{}].[{}] WHERE [loadtype] IS NOT NULL"
+cursor.execute(query.format(schema, table_name))  # Safe schema/table formatting
+
+# Backup version query with parameters
+cursor.execute(
+    "SELECT * FROM [" + backup_schema + "].[" + backup_table + "] WHERE version_id = ?",
+    version_id
+)
+
+# Rollback operation with parameterized queries
+insert_sql = f"""
+    INSERT INTO [{self.data_schema}].[{base_name}] ({column_list})
+    SELECT {column_list} 
+    FROM [{self.backup_schema}].[{backup_table}] 
+    WHERE version_id = ?
+"""
+cursor.execute(insert_sql, version_id)
+```
+
+#### 3. Export Security
+```python
+# Safe CSV export with proper escaping
+def row_to_csv(row):
+    """Secure CSV row generation with proper escaping"""
+    out_fields = []
+    for v in row:
+        if v is None:
+            out_fields.append('')
+        else:
+            s = str(v)
+            # Escape quotes by doubling
+            if '"' in s:
+                s = s.replace('"', '""')
+            # Quote if contains delimiter, quote, or newline
+            if any(ch in s for ch in [',', '"', '\n', '\r']):
+                s = f'"{s}"'
+            out_fields.append(s)
+    return ','.join(out_fields)
+```
+
+## Performance Architecture
+
+### Enhanced Database Performance
+
+#### Connection Pooling with Retry Logic
 ```python
 class DatabaseManager:
-    """Database connection management with pooling"""
-    
-    def __init__(self):
-        # Connection pool configuration
-        self.pool_size = int(os.getenv("DB_POOL_SIZE", "5"))
-        self._pool: List[pyodbc.Connection] = []
-        self._pool_lock = threading.Lock()
-        self._in_use = 0
-        
-        # Retry configuration
-        self.max_retries = int(os.getenv("DB_MAX_RETRIES", "3"))
-        self.retry_backoff = float(os.getenv("DB_RETRY_BACKOFF", "0.5"))
-    
     def get_connection(self) -> pyodbc.Connection:
-        """Get connection with retry logic"""
+        """Enhanced connection with retry and backoff"""
         attempt = 0
         while True:
             try:
@@ -379,543 +453,262 @@ class DatabaseManager:
                 time.sleep(self.retry_backoff * attempt)
 ```
 
-### File System Architecture
-
-#### Directory Structure
-```
-C:\data\reference_data\
-├── temp\                   # Temporary processing files
-│   ├── timestamp_filename.csv
-│   └── ...
-├── archive\               # Processed file archive
-│   ├── filename_timestamp.csv
-│   └── ...
-├── format\               # Format configuration files
-│   ├── timestamp_filename.fmt
-│   └── ...
-└── logs\                 # System logs (optional file logging)
-    ├── system.log
-    └── error.log
-```
-
-#### File Handling Security
+#### Efficient Backup Operations
 ```python
-class FileHandler:
-    """Secure file operations with path validation"""
+def get_backup_versions(self, connection: pyodbc.Connection, base_name: str) -> List[Dict]:
+    """Optimized backup version retrieval"""
+    backup_table = f"{base_name}_backup"
     
-    def get_safe_path(self, base_dir: str, filename: str) -> str:
-        """Generate safe file path within base directory"""
-        # Sanitize filename
-        safe_name = os.path.basename(filename)
-        safe_name = re.sub(r'[^\w\.-]', '_', safe_name)
-        
-        # Construct path within base directory
-        safe_path = os.path.join(base_dir, safe_name)
-        
-        # Validate path is within base directory (prevent traversal)
-        if not os.path.commonpath([safe_path, base_dir]) == base_dir:
-            raise ValueError("Invalid file path")
-        
-        return safe_path
+    cursor = connection.cursor()
+    query = f"""
+        SELECT version_id, COUNT(*) as row_count, 
+               MIN([ref_data_loadtime]) as created_date
+        FROM [{self.backup_schema}].[{backup_table}]
+        GROUP BY version_id
+        ORDER BY version_id DESC
+    """
+    cursor.execute(query)
     
-    async def save_uploaded_file(self, file: UploadFile, ...) -> Tuple[str, str]:
-        """Save uploaded file with format configuration"""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_name = self.extract_table_base_name(file.filename)
-        
-        # Generate timestamped filenames
-        temp_filename = f"{timestamp}_{base_name}.csv"
-        fmt_filename = f"{timestamp}_{base_name}.fmt"
-        
-        # Save files securely
-        temp_path = self.get_safe_path(self.temp_location, temp_filename)
-        fmt_path = self.get_safe_path(self.format_location, fmt_filename)
-        
-        # Write file content
-        async with aiofiles.open(temp_path, 'wb') as f:
-            content = await file.read()
-            await f.write(content)
-        
-        # Write format configuration
-        format_config = self.build_format_config(...)
-        async with aiofiles.open(fmt_path, 'w') as f:
-            await f.write(json.dumps(format_config, indent=2))
-        
-        return temp_path, fmt_path
-```
-
-## Data Flow Architecture
-
-### Upload and Processing Flow
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant UI as React UI
-    participant API as FastAPI
-    participant BG as Background Task
-    participant DB as SQL Server
-    participant FS as File System
-    
-    U->>UI: Upload CSV file
-    UI->>API: POST /upload (multipart)
-    API->>FS: Save to temp directory
-    API->>FS: Create format file
-    API->>BG: Start background ingestion
-    API->>UI: Return progress key
-    
-    par Background Processing
-        BG->>FS: Read CSV file
-        BG->>DB: Create/validate schema
-        BG->>DB: Process data in batches
-        BG->>DB: Run validation
-        BG->>FS: Archive original file
-        BG->>API: Update progress
-    and Real-time Updates
-        UI->>API: GET /progress/{key} (polling)
-        API->>UI: Progress updates
-        UI->>U: Display progress
-    end
-    
-    BG->>API: Complete notification
-    UI->>U: Show completion
-```
-
-### Data Processing Pipeline
-
-```mermaid
-graph LR
-    subgraph "File Processing"
-        A[CSV Upload] --> B[Format Detection]
-        B --> C[File Validation]
-        C --> D[Temporary Storage]
-    end
-    
-    subgraph "Schema Management"
-        D --> E[Extract Table Name]
-        E --> F[Schema Creation/Validation]
-        F --> G[Table Preparation]
-    end
-    
-    subgraph "Data Loading"
-        G --> H[Batch Reading]
-        H --> I[Data Transformation]
-        I --> J[Stage Loading]
-        J --> K[Validation]
-    end
-    
-    subgraph "Finalization"
-        K --> L[Main Table Update]
-        L --> M[Backup Creation]
-        M --> N[File Archive]
-        N --> O[Cleanup]
-    end
-```
-
-## Security Architecture
-
-### Security Layers
-
-#### 1. Application Security Layer
-```python
-# Input validation and sanitization
-def validate_input(user_input: str, input_type: str) -> str:
-    """Comprehensive input validation"""
-    if input_type == "sql_identifier":
-        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', user_input):
-            raise ValueError("Invalid SQL identifier")
-    
-    if input_type == "filename":
-        safe_name = os.path.basename(user_input)
-        safe_name = re.sub(r'[^\w\.-]', '_', safe_name)
-        return safe_name
-    
-    return user_input
-
-# SQL injection prevention
-def execute_parameterized_query(cursor, sql: str, params: tuple):
-    """All database operations use parameterized queries"""
-    cursor.execute(sql, params)
-```
-
-#### 2. Database Security Layer
-```python
-# Connection security
-connection_string = (
-    f"DRIVER={{ODBC Driver 17 for SQL Server}};"
-    f"SERVER={host};"
-    f"DATABASE={database};"
-    f"UID={username};"
-    f"PWD={password};"
-    f"TrustServerCertificate=yes;"
-    f"Encrypt=yes;"  # Force encryption
-)
-
-# Schema-based access control
-def ensure_schema_permissions(schema_name: str):
-    """Verify user permissions on specific schema"""
-    permissions = [
-        "SELECT", "INSERT", "UPDATE", "DELETE",
-        "CREATE TABLE", "ALTER TABLE", "EXECUTE"
+    return [
+        {
+            "version_id": row[0],
+            "row_count": row[1],
+            "created_date": row[2].isoformat() if row[2] else None
+        }
+        for row in cursor.fetchall()
     ]
-    # Verify each permission before operations
 ```
 
-#### 3. File System Security Layer
+#### Streaming Export Performance
 ```python
-# File access controls
-def validate_file_access(file_path: str, operation: str):
-    """Ensure file operations are within allowed directories"""
-    allowed_dirs = [
-        os.getenv("temp_location"),
-        os.getenv("archive_location"),
-        os.getenv("format_location")
-    ]
-    
-    resolved_path = os.path.abspath(file_path)
-    if not any(resolved_path.startswith(dir) for dir in allowed_dirs):
-        raise PermissionError("File access denied")
+async def stream_csv_export():
+    """Memory-efficient streaming CSV export"""
+    batch_size = 500
+    while True:
+        rows = cursor.fetchmany(batch_size)
+        if not rows:
+            break
+        # Process and yield batches to prevent memory buildup
+        lines = [row_to_csv(r) for r in rows]
+        yield '\n'.join(lines) + '\n'
 ```
 
-## Performance Architecture
+### Frontend Performance Enhancements
 
-### Async Processing Model
-
-#### FastAPI Async Benefits
-```python
-# Non-blocking I/O operations
-async def upload_file(file: UploadFile):
-    """Non-blocking file upload handling"""
-    # File I/O doesn't block other requests
-    content = await file.read()  # async file reading
+#### Efficient Data Filtering
+```javascript
+// Advanced filtering with regex and discrete values
+const filteredRows = data.rows.filter(row => {
+  return data.columns.every((col, cIdx) => {
+    const cell = row[cIdx];
+    const cellStr = (cell === null || cell === undefined) ? '' : String(cell);
     
-    # Database operations can be made async
-    async with async_database_session() as session:
-        await session.execute(query)
-        await session.commit()
+    // Regex filter takes precedence
+    const pattern = regexFilters[col];
+    if (pattern && pattern.trim() !== '') {
+      try {
+        const re = new RegExp(pattern, 'i');
+        return re.test(cellStr);
+      } catch (e) {
+        return true; // Invalid regex -> ignore filter
+      }
+    }
+    
+    // Discrete value filter
+    const valSel = valueFilters[col];
+    if (valSel && valSel.length > 0) {
+      return valSel.includes(cellStr);
+    }
+    
+    return true;
+  });
+});
 ```
 
-#### Background Task Processing
-```python
-# Background processing prevents request blocking
-@app.post("/upload")
-async def upload_file(background_tasks: BackgroundTasks):
-    # Immediate response to user
-    background_tasks.add_task(heavy_processing_task, file_data)
-    return {"status": "processing"}
+#### Optimized Component Updates
+```javascript
+// Memoized components for performance
+const MemoizedVersionRow = React.memo(({ version, onSelect, isSelected }) => {
+  return (
+    <Chip 
+      label={`v${version.version_id}`}
+      variant={isSelected ? 'filled' : 'outlined'}
+      clickable
+      onClick={() => onSelect(version)}
+    />
+  );
+});
 
-# Heavy processing happens in background
-async def heavy_processing_task(file_data):
-    """CPU-intensive work doesn't block API responses"""
-    await process_large_csv_file(file_data)
+// Efficient state updates
+const updateVersionData = useCallback((versionId, newData) => {
+  setVersionRows(prev => ({
+    ...prev,
+    [`${baseName}|${versionId}`]: {
+      ...prev[`${baseName}|${versionId}`],
+      ...newData
+    }
+  }));
+}, [baseName]);
 ```
 
-### Database Performance
+## Monitoring and Observability
 
-#### Connection Pooling
+### Enhanced Logging Architecture
 ```python
-class ConnectionPool:
-    """Database connection pool for performance"""
+class DatabaseLogger:
+    """Enhanced database logging with structured data"""
     
-    def __init__(self, pool_size=5):
-        self._pool = []
-        self._lock = threading.Lock()
-        self.pool_size = pool_size
-    
-    def get_connection(self):
-        """Reuse existing connections when available"""
-        with self._lock:
-            if self._pool:
-                return self._pool.pop()
-            else:
-                return self._create_new_connection()
-    
-    def return_connection(self, conn):
-        """Return connection to pool for reuse"""
-        with self._lock:
-            if len(self._pool) < self.pool_size:
-                self._pool.append(conn)
-            else:
-                conn.close()
-```
-
-#### Batch Processing
-```python
-def batch_insert_data(data: List[List], batch_size=990):
-    """Multi-row INSERT for performance"""
-    # Process data in batches to optimize SQL Server performance
-    for i in range(0, len(data), batch_size):
-        batch = data[i:i+batch_size]
-        
-        # Multi-row VALUES clause
-        placeholders = ','.join(['(?' + ',?' * (len(batch[0])-1) + ')'] * len(batch))
-        sql = f"INSERT INTO table_name VALUES {placeholders}"
-        
-        # Flatten batch data for parameterized query
-        flat_values = [item for row in batch for item in row]
-        cursor.execute(sql, flat_values)
-```
-
-### Memory Management
-
-#### Streaming Data Processing
-```python
-async def process_large_csv(file_path: str):
-    """Process large files without loading entirely into memory"""
-    chunk_size = int(os.getenv("CSV_CHUNK_SIZE", "10000"))
-    
-    async with aiofiles.open(file_path, 'r') as file:
-        chunk = []
-        async for line in file:
-            chunk.append(line)
-            
-            if len(chunk) >= chunk_size:
-                await process_chunk(chunk)
-                chunk = []  # Clear memory
-                
-        # Process remaining chunk
-        if chunk:
-            await process_chunk(chunk)
-```
-
-## Scalability Architecture
-
-### Horizontal Scaling Considerations
-
-#### Stateless Application Design
-```python
-# Progress tracking can be moved to external store for scaling
-class ExternalProgressTracker:
-    """Redis-based progress tracking for multi-instance deployment"""
-    
-    def __init__(self, redis_client):
-        self.redis = redis_client
-    
-    def update_progress(self, key: str, progress_data: dict):
-        """Store progress in Redis for multi-instance access"""
-        self.redis.setex(
-            f"progress:{key}", 
-            3600,  # 1 hour TTL
-            json.dumps(progress_data)
+    async def log_load_type_verification(self, table_name: str, verification_result: Dict):
+        """Log load type verification events"""
+        await self.log_info(
+            "load_type_verification",
+            f"Load type verification for {table_name}: "
+            f"mismatch={verification_result['has_mismatch']}, "
+            f"determined={verification_result['determined_load_type']}, "
+            f"requested={verification_result['requested_load_type']}"
         )
-```
-
-#### Database Scaling
-```python
-# Connection string for read replicas
-class ScalableDatabase:
-    """Database with read/write separation"""
     
-    def __init__(self):
-        self.write_conn = self._connect(os.getenv("DB_WRITE_HOST"))
-        self.read_conn = self._connect(os.getenv("DB_READ_HOST"))
-    
-    def execute_read(self, query, params):
-        """Use read replica for queries"""
-        return self.read_conn.execute(query, params)
-    
-    def execute_write(self, query, params):
-        """Use primary for writes"""
-        return self.write_conn.execute(query, params)
-```
-
-### Load Balancing Architecture
-
-```
-         Internet
-            │
-    ┌───────┴───────┐
-    │ Load Balancer │
-    │   (Nginx)     │
-    └───────┬───────┘
-            │
-    ┌───────┴───────┐
-    │   Frontend    │
-    │ (Static Files)│
-    └───────┬───────┘
-            │
-    ┌───────┼───────┐
-    │       │       │
-┌───▼──┐ ┌──▼──┐ ┌──▼──┐
-│ API  │ │ API │ │ API │
-│ Node │ │ Node│ │ Node│
-│  1   │ │  2  │ │  3  │
-└───┬──┘ └──┬──┘ └──┬──┘
-    │       │       │
-    └───────┼───────┘
-            │
-    ┌───────▼───────┐
-    │   Database    │
-    │  (SQL Server) │
-    └───────────────┘
-```
-
-## Monitoring & Observability Architecture
-
-### Application Monitoring
-```python
-class SystemMonitor:
-    """Comprehensive system monitoring"""
-    
-    def collect_metrics(self):
-        """Collect performance metrics"""
-        return {
-            "database": {
-                "active_connections": self.db_manager.get_active_connections(),
-                "pool_usage": self.db_manager.get_pool_stats(),
-                "query_performance": self.get_slow_queries()
-            },
-            "file_system": {
-                "disk_usage": self.get_disk_usage(),
-                "temp_file_count": self.count_temp_files(),
-                "archive_size": self.get_archive_size()
-            },
-            "application": {
-                "memory_usage": psutil.Process().memory_info(),
-                "cpu_usage": psutil.cpu_percent(),
-                "active_uploads": self.get_active_uploads()
-            }
-        }
-```
-
-### Logging Architecture
-```python
-class StructuredLogger:
-    """Structured logging for better observability"""
-    
-    def log_event(self, event_type: str, details: dict):
-        """Log structured events for analysis"""
-        log_entry = {
-            "timestamp": datetime.utcnow().isoformat(),
-            "event_type": event_type,
-            "details": details,
-            "correlation_id": self.get_correlation_id()
-        }
+    async def log_backup_operation(self, operation: str, base_name: str, version_id: int = None, result: Dict = None):
+        """Log backup and rollback operations"""
+        message = f"Backup {operation} for {base_name}"
+        if version_id:
+            message += f" version {version_id}"
+        if result:
+            message += f": {result.get('status', 'unknown')}"
         
-        # Multiple log destinations
-        self.write_to_file(log_entry)
-        self.write_to_database(log_entry)
-        # Could also send to external systems (ELK, Splunk, etc.)
+        await self.log_info("backup_operation", message)
+```
+
+### System Health Monitoring
+```python
+@app.get("/health")
+async def health_check():
+    """Enhanced health check with component status"""
+    try:
+        # Database connectivity
+        conn = db_manager.get_connection()
+        db_status = "healthy"
+        conn.close()
+    except Exception:
+        db_status = "unhealthy"
+    
+    # File system accessibility
+    try:
+        temp_path = os.getenv("temp_location")
+        fs_status = "healthy" if os.path.exists(temp_path) else "unhealthy"
+    except Exception:
+        fs_status = "unhealthy"
+    
+    return {
+        "status": "healthy" if all([db_status == "healthy", fs_status == "healthy"]) else "degraded",
+        "components": {
+            "database": db_status,
+            "file_system": fs_status,
+            "backup_system": "healthy",  # Could add backup system checks
+            "load_type_system": "healthy"
+        },
+        "timestamp": datetime.utcnow().isoformat()
+    }
 ```
 
 ## Deployment Architecture
 
-### Development Environment
+### Production Configuration
 ```yaml
-# docker-compose.yml for development
+# Enhanced docker-compose for production
 version: '3.8'
 services:
   frontend:
-    build: ./frontend
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend/src:/app/src
-  
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    environment:
+      - REACT_APP_API_URL=https://api.yourdomain.com
+      - REACT_APP_ENABLE_ROLLBACK=true
+      - REACT_APP_ENABLE_LOAD_TYPE_OVERRIDE=true
+    
   backend:
     build: ./backend
-    ports:
-      - "8000:8000"
     environment:
-      - DB_HOST=sqlserver
+      - DB_POOL_SIZE=10
+      - ENABLE_BACKUP_OPERATIONS=true
+      - ENABLE_LOAD_TYPE_VERIFICATION=true
+      - CORS_ORIGINS=https://yourdomain.com
     volumes:
-      - ./backend:/app
-  
+      - /data/reference_data:/data/reference_data
+      - /logs:/app/logs
+    
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2019-latest
     environment:
       - ACCEPT_EULA=Y
-      - SA_PASSWORD=YourStrong@Passw0rd
-    ports:
-      - "1433:1433"
+      - SA_PASSWORD=${SQL_SERVER_PASSWORD}
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+
+volumes:
+  sqlserver_data:
 ```
 
-### Production Architecture
-```
-┌─────────────────┐    ┌─────────────────┐
-│   CDN/Proxy    │    │   Web Server    │
-│    (Nginx)     │    │    (Nginx)      │
-└─────┬───────────┘    └─────┬───────────┘
-      │                      │
-      ▼                      ▼
-┌─────────────────┐    ┌─────────────────┐
-│ Static Content  │    │  Application    │
-│  (React Build)  │    │   (FastAPI)     │
-└─────────────────┘    └─────┬───────────┘
-                             │
-                             ▼
-                      ┌─────────────────┐
-                      │   Database      │
-                      │ (SQL Server)    │
-                      └─────────────────┘
-```
+### Load Balancer Configuration
+```nginx
+# Enhanced Nginx configuration for load balancing
+upstream backend_api {
+    server backend1:8000 weight=3;
+    server backend2:8000 weight=2;
+    server backend3:8000 weight=1;
+}
 
-## Configuration Architecture
-
-### Environment-Based Configuration
-```python
-class ConfigManager:
-    """Centralized configuration management"""
+server {
+    listen 80;
+    server_name yourdomain.com;
     
-    def __init__(self):
-        # Load configuration from multiple sources
-        self.config = {}
-        self._load_from_env()
-        self._load_from_file()
-        self._validate_config()
+    # Static frontend files
+    location / {
+        root /var/www/frontend/build;
+        try_files $uri $uri/ /index.html;
+    }
     
-    def _load_from_env(self):
-        """Load from environment variables"""
-        env_mapping = {
-            "database": {
-                "host": "DB_HOST",
-                "name": "DB_NAME", 
-                "user": "DB_USER",
-                "password": "DB_PASSWORD"
-            },
-            "file_system": {
-                "temp_location": "TEMP_LOCATION",
-                "archive_location": "ARCHIVE_LOCATION"
-            },
-            "performance": {
-                "pool_size": "DB_POOL_SIZE",
-                "batch_size": "BATCH_SIZE"
-            }
-        }
+    # API endpoints with enhanced headers
+    location /api/ {
+        proxy_pass http://backend_api;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
         
-        for section, variables in env_mapping.items():
-            self.config[section] = {}
-            for key, env_var in variables.items():
-                self.config[section][key] = os.getenv(env_var)
+        # Enhanced timeouts for large file processing
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+        
+        # Support for Server-Sent Events
+        proxy_buffering off;
+        proxy_cache off;
+    }
+    
+    # Large file upload support
+    client_max_body_size 50M;
+}
 ```
 
-### Feature Flags
-```python
-class FeatureFlags:
-    """Feature flag management for gradual rollouts"""
-    
-    def __init__(self):
-        self.flags = {
-            "type_inference": os.getenv("ENABLE_TYPE_INFERENCE", "false").lower() == "true",
-            "bulk_insert": os.getenv("ENABLE_BULK_INSERT", "false").lower() == "true",
-            "advanced_validation": os.getenv("ENABLE_ADVANCED_VALIDATION", "false").lower() == "true",
-            "real_time_monitoring": os.getenv("ENABLE_RT_MONITORING", "true").lower() == "true"
-        }
-    
-    def is_enabled(self, flag_name: str) -> bool:
-        """Check if feature flag is enabled"""
-        return self.flags.get(flag_name, False)
-```
+## Future Architecture Enhancements
 
-## Conclusion
+### Planned Features
+1. **Multi-tenancy Support**: Schema isolation per organization
+2. **Advanced Analytics**: Data quality metrics and trend analysis  
+3. **Workflow Engine**: Complex data processing pipelines
+4. **API Rate Limiting**: Request throttling and quota management
+5. **Enhanced Security**: OAuth2/JWT authentication system
+6. **Cloud Integration**: AWS/Azure blob storage support
+7. **Real-time Collaboration**: Multi-user simultaneous operations
+8. **Advanced Validation**: ML-powered data quality checks
 
-The Reference Data Auto Ingest System architecture provides:
+### Scalability Roadmap
+1. **Microservices Split**: Separate backup, ingestion, and validation services
+2. **Message Queue Integration**: Redis/RabbitMQ for async processing
+3. **Caching Layer**: Redis for session and frequently accessed data
+4. **Container Orchestration**: Kubernetes deployment with auto-scaling
+5. **Database Scaling**: Read replicas and sharding strategies
 
-- **Scalability**: Async processing, connection pooling, and stateless design
-- **Security**: Multi-layer security with comprehensive input validation
-- **Performance**: Optimized database operations and memory management  
-- **Reliability**: Error handling, retry logic, and comprehensive logging
-- **Maintainability**: Clean separation of concerns and modular design
-- **Monitoring**: Comprehensive observability and structured logging
-
-This architecture supports both current functionality and future enhancements, providing a solid foundation for enterprise-grade reference data management.
+This enhanced architecture provides a robust foundation for enterprise-grade reference data management with advanced load type intelligence and comprehensive backup/rollback capabilities.
