@@ -14,6 +14,7 @@ import {
 import FileUploadComponent from './components/FileUploadComponent';
 import ProgressDisplay from './components/ProgressDisplay';
 import LogsDisplay from './components/LogsDisplay';
+import RollbackManager from './components/RollbackManager';
 import ConfigurationPanel from './components/ConfigurationPanel';
 import ReferenceDataConfigDisplay from './components/ReferenceDataConfigDisplay';
 
@@ -311,12 +312,19 @@ function App() {
             </Card>
 
             {/* Logs Display */}
-            <Card>
+            <Card sx={{ mb: 3 }}>
               <CardContent sx={{ p: 3 }}>
                 <Typography variant="h6" gutterBottom sx={{ color: 'text.primary', fontWeight: 600 }}>
                   System Logs
                 </Typography>
                 <LogsDisplay />
+              </CardContent>
+            </Card>
+
+            {/* Rollback Manager */}
+            <Card>
+              <CardContent sx={{ p: 3 }}>
+                <RollbackManager />
               </CardContent>
             </Card>
           </>

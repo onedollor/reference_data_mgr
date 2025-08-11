@@ -5,6 +5,7 @@ Database management utilities for SQL Server connection and operations
 import os
 import pyodbc
 import traceback
+import re
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 import threading
@@ -765,6 +766,168 @@ class DatabaseManager:
             # On error, default to current load mode
             print(f"WARNING: Failed to determine load type for {table_name}: {str(e)}")
             return 'F' if current_load_mode == 'full' else 'A'
+
+    # ---------------- Rollback / Backup Introspection Helpers -----------------
+    def list_backup_tables(self, connection: pyodbc.Connection) -> List[Dict[str, Any]]:
+        """Return metadata for all backup tables in backup schema with validation of related main & stage tables."""
+        cursor = connection.cursor()
+        cursor.execute("""
+            SELECT TABLE_NAME
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE'
+              AND TABLE_NAME LIKE '%[_]backup'
+        """, self.backup_schema)
+        rows = cursor.fetchall()
+        results = []
+        for r in rows:
+            backup_table = r[0]
+            if not backup_table.endswith('_backup'):
+                continue
+            base_name = backup_table[:-7]  # remove _backup
+            # Validate related main and stage
+            has_main = self.table_exists(connection, base_name, self.data_schema)
+            has_stage = self.table_exists(connection, f"{base_name}_stage", self.data_schema)
+            # Count versions
+            version_count = 0
+            latest_version = None
+            try:
+                v_cursor = connection.cursor()
+                v_cursor.execute(
+                    "SELECT COUNT(DISTINCT version_id), MAX(version_id) FROM [" + self.backup_schema + "].[" + backup_table + "]"
+                )
+                vrow = v_cursor.fetchone()
+                if vrow:
+                    version_count = vrow[0] or 0
+                    latest_version = vrow[1]
+            except Exception:
+                pass
+            results.append({
+                'backup_table': backup_table,
+                'base_name': base_name,
+                'has_main': has_main,
+                'has_stage': has_stage,
+                'version_count': version_count,
+                'latest_version': latest_version
+            })
+        return results
+
+    def get_backup_versions(self, connection: pyodbc.Connection, base_name: str) -> List[int]:
+        """Return list of version_ids for a given backup base name (descending)."""
+        if not base_name or not re.match(r'^[A-Za-z0-9_]+$', base_name):
+            return []
+        backup_table = f"{base_name}_backup"
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                "SELECT DISTINCT version_id FROM [" + self.backup_schema + "].[" + backup_table + "] ORDER BY version_id DESC"
+            )
+            return [row[0] for row in cursor.fetchall() if row[0] is not None]
+        except Exception:
+            return []
+
+    def get_backup_version_rows(self, connection: pyodbc.Connection, base_name: str, version_id: int, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+        """Return rows for a version with pagination (offset, limit) plus columns & total row count.
+        Enforces 1 <= limit <= 1000. Offset >= 0.
+        """
+        result = {'rows': [], 'columns': [], 'total_rows': 0, 'offset': offset, 'limit': limit}
+        if not base_name or not re.match(r'^[A-Za-z0-9_]+$', base_name):
+            return result
+        backup_table = f"{base_name}_backup"
+        cursor = connection.cursor()
+        try:
+            # Enforce sane bounds (1..1000)
+            try:
+                limit = int(limit)
+            except Exception:
+                limit = 50
+            if limit < 1:
+                limit = 1
+            if limit > 1000:
+                limit = 1000
+            try:
+                offset = int(offset)
+            except Exception:
+                offset = 0
+            if offset < 0:
+                offset = 0
+            result['limit'] = limit
+            result['offset'] = offset
+            # columns
+            cols = self.get_table_columns(connection, backup_table, self.backup_schema)
+            col_names = [c['name'] for c in cols]
+            result['columns'] = col_names
+            # total rows for version
+            count_sql = "SELECT COUNT(*) FROM [" + self.backup_schema + "].[" + backup_table + "] WHERE version_id = ?"
+            cursor.execute(count_sql, version_id)
+            result['total_rows'] = cursor.fetchone()[0]
+            # paged rows (order by first column for deterministic paging)
+            select_sql = (
+                "SELECT * FROM [" + self.backup_schema + "].[" + backup_table + "] WHERE version_id = ? ORDER BY 1 OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
+            )
+            cursor.execute(select_sql, version_id, offset, limit)
+            for row in cursor.fetchall():
+                # pyodbc row -> list
+                result['rows'].append([row[i] for i in range(len(row))])
+        except Exception as e:
+            result['error'] = str(e)
+        return result
+
+    def rollback_to_version(self, connection: pyodbc.Connection, base_name: str, version_id: int) -> Dict[str, Any]:
+        """Rollback main (and stage if exists) table to data from specified backup version.
+        Returns dict with counts and actions."""
+        outcome = {'base_name': base_name, 'version_id': version_id, 'main_rows': 0, 'stage_rows': 0, 'status': 'started'}
+        if not base_name or not re.match(r'^[A-Za-z0-9_]+$', base_name):
+            outcome['status'] = 'invalid_base_name'
+            return outcome
+        backup_table = f"{base_name}_backup"
+        main_exists = self.table_exists(connection, base_name, self.data_schema)
+        if not main_exists:
+            outcome['status'] = 'main_missing'
+            return outcome
+        stage_name = f"{base_name}_stage"
+        stage_exists = self.table_exists(connection, stage_name, self.data_schema)
+        try:
+            connection.autocommit = False
+            cursor = connection.cursor()
+            # Determine intersection columns between backup and main (exclude version_id)
+            backup_cols = [c['name'] for c in self.get_table_columns(connection, backup_table, self.backup_schema) if c['name'].lower() != 'version_id']
+            main_cols = [c['name'] for c in self.get_table_columns(connection, base_name, self.data_schema)]
+            # Exclude metadata columns that may not exist in main
+            exclude_meta = {'version_id'}
+            common_cols = [c for c in backup_cols if c in main_cols and c.lower() not in exclude_meta]
+            if not common_cols:
+                raise Exception('No common columns between backup and main tables')
+            col_list = ', '.join('[' + c + ']' for c in common_cols)
+            # Truncate main
+            cursor.execute("TRUNCATE TABLE [" + self.data_schema + "].[" + base_name + "]")
+            # Insert from backup version
+            insert_sql = (
+                "INSERT INTO [" + self.data_schema + "].[" + base_name + "] (" + col_list + ") "
+                "SELECT " + col_list + " FROM [" + self.backup_schema + "].[" + backup_table + "] WHERE version_id = ?"
+            )
+            cursor.execute(insert_sql, version_id)
+            outcome['main_rows'] = cursor.rowcount if cursor.rowcount is not None else 0
+            # Stage table optional
+            if stage_exists:
+                # Use same columns intersection for stage
+                cursor.execute("TRUNCATE TABLE [" + self.data_schema + "].[" + stage_name + "]")
+                cursor.execute(
+                    "INSERT INTO [" + self.data_schema + "].[" + stage_name + "] (" + col_list + ") SELECT " + col_list + " FROM [" + self.backup_schema + "].[" + backup_table + "] WHERE version_id = ?",
+                    version_id
+                )
+                outcome['stage_rows'] = cursor.rowcount if cursor.rowcount is not None else 0
+            connection.commit()
+            outcome['status'] = 'success'
+        except Exception as e:
+            try:
+                connection.rollback()
+            except Exception:
+                pass
+            outcome['status'] = 'error'
+            outcome['error'] = str(e)
+        finally:
+            connection.autocommit = True
+        return outcome
     
     def insert_reference_data_cfg_record(self, connection: pyodbc.Connection, table_name: str) -> None:
         """Insert a record into Reference_Data_Cfg table after successful ingestion"""

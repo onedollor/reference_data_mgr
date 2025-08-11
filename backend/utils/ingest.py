@@ -53,6 +53,8 @@ class DataIngester:
         """
         connection = None
         overall_start = time.perf_counter()
+        # Capture a single static load timestamp for all rows in this ingestion
+        static_load_timestamp = datetime.utcnow()
 
         # Progress key (simple filename-based token)
         progress_key = re.sub(r'[^a-zA-Z0-9_]', '_', filename)
@@ -116,12 +118,10 @@ class DataIngester:
             yield f"CSV file loaded: {total_rows} rows (read in {(time.perf_counter()-t_read):.2f}s, {(total_rows/(time.perf_counter()-t_read) if total_rows else 0):.0f} rows/s)"
             if total_rows == 0:
                 yield "ERROR! CSV file contains no data rows"
-                
                 # Auto-cancel on empty file
                 if progress_key:
                     prog.request_cancel(progress_key)
                     yield "Upload process automatically canceled due to empty file"
-                
                 return
 
             # Step 5: Process headers
@@ -328,7 +328,8 @@ class DataIngester:
                 self.db_manager.data_schema,
                 total_rows,
                 progress_key,
-                determined_load_type
+                determined_load_type,
+                static_load_timestamp
             )
             elapsed_load = time.perf_counter()-t_load
             rps = (total_rows/elapsed_load) if elapsed_load>0 else 0
@@ -657,7 +658,8 @@ class DataIngester:
         schema: str,
         total_rows: int,
         progress_key: str | None = None,
-        load_type: str = 'F'
+        load_type: str = 'F',
+        static_load_timestamp: datetime | None = None
     ) -> None:
         try:
             cursor = connection.cursor()
@@ -677,8 +679,8 @@ class DataIngester:
 
             # Prepare column list and SQL statement once
             data_columns = [col for col in df.columns]
-            # Add only loadtype to the column list (let ref_data_loadtime use DEFAULT GETDATE())
-            insert_columns = data_columns + ['loadtype']
+            # Insert explicit static ref_data_loadtime plus loadtype
+            insert_columns = data_columns + ['ref_data_loadtime', 'loadtype']
             column_list = ', '.join([f'[{col}]' for col in insert_columns])
             # Trailer removal is now handled before this function is called
             
@@ -735,7 +737,8 @@ class DataIngester:
                 batch_params = []
                 for _, row in slice_df.iterrows():
                     row_values = [prepare_value(row[c], c) for c in data_columns]
-                    # Add only loadtype (ref_data_loadtime will use DEFAULT GETDATE())
+                    # Append static ref_data_loadtime then loadtype
+                    row_values.append(static_load_timestamp if static_load_timestamp else datetime.utcnow())
                     row_values.append(load_type)
                     batch_params.extend(row_values)  # Flatten into single list
                 
@@ -759,7 +762,8 @@ class DataIngester:
                         for col in data_columns:
                             value = prepare_value(row[col], col)
                             row_values.append(value)
-                        # Add only loadtype (ref_data_loadtime will use DEFAULT GETDATE())
+                        # Append static load timestamp then loadtype
+                        row_values.append(static_load_timestamp if static_load_timestamp else datetime.utcnow())
                         row_values.append(load_type)
                         cursor.execute(single_sql, row_values)
                             

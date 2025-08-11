@@ -13,7 +13,7 @@ _BACKEND_ROOT = os.path.abspath(os.path.join(_CURRENT_DIR, '..'))
 if _BACKEND_ROOT not in sys.path:
     sys.path.insert(0, _BACKEND_ROOT)
 import traceback
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 import json
 
@@ -92,6 +92,200 @@ async def root():
         "version": "1.0.0",
         "status": "healthy"
     }
+
+# ---------------- Rollback / Backup APIs ----------------
+@app.get("/backups")
+async def list_backups():
+    """List backup tables with validation of related main/stage tables."""
+    try:
+        conn = db_manager.get_connection()
+        data = db_manager.list_backup_tables(conn)
+        conn.close()
+        return {"backups": data}
+    except Exception as e:
+        await logger.log_error("list_backups", str(e), traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/backups/{base_name}/versions")
+async def get_backup_versions(base_name: str):
+    try:
+        conn = db_manager.get_connection()
+        versions = db_manager.get_backup_versions(conn, base_name)
+        conn.close()
+        return {"base_name": base_name, "versions": versions}
+    except Exception as e:
+        await logger.log_error("get_backup_versions", str(e), traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/backups/{base_name}/versions/{version_id}")
+async def view_backup_version(base_name: str, version_id: int, limit: int = 50, offset: int = 0):
+    try:
+        conn = db_manager.get_connection()
+        data = db_manager.get_backup_version_rows(conn, base_name, version_id, limit, offset)
+        conn.close()
+        if data.get('error'):
+            raise HTTPException(status_code=400, detail=data['error'])
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        await logger.log_error("view_backup_version", str(e), traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/backups/{base_name}/rollback/{version_id}")
+async def rollback_backup_version(base_name: str, version_id: int):
+    try:
+        conn = db_manager.get_connection()
+        outcome = db_manager.rollback_to_version(conn, base_name, version_id)
+        conn.close()
+        if outcome.get('status') == 'error':
+            raise HTTPException(status_code=400, detail=outcome.get('error', 'Rollback failed'))
+        await logger.log_info("rollback", f"Rollback executed for {base_name} to version {version_id}: status={outcome.get('status')}")
+        return outcome
+    except HTTPException:
+        raise
+    except Exception as e:
+        await logger.log_error("rollback", str(e), traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/backups/{base_name}/export-main")
+async def export_main_table_csv(base_name: str):
+    """Export current main table data for the given base_name as CSV."""
+    try:
+        # Basic validation
+        if not re.fullmatch(r"[A-Za-z0-9_]+", base_name):
+            raise HTTPException(status_code=400, detail="Invalid base name")
+        conn = db_manager.get_connection()
+        if not db_manager.table_exists(conn, base_name, db_manager.data_schema):
+            conn.close()
+            raise HTTPException(status_code=404, detail="Main table not found")
+        # Fetch columns
+        cols_meta = db_manager.get_table_columns(conn, base_name, db_manager.data_schema)
+        # Exclude internal/meta columns from export
+        exclude_cols = {"ref_data_loadtime", "loadtype"}
+        col_names = [c['name'] for c in cols_meta if c['name'].lower() not in exclude_cols]
+        if not col_names:
+            conn.close()
+            raise HTTPException(status_code=400, detail="No columns found")
+        cursor = conn.cursor()
+        # Build select
+        select_sql = "SELECT " + ", ".join(f"[{c}]" for c in col_names) + f" FROM [{db_manager.data_schema}].[{base_name}]"
+        cursor.execute(select_sql)
+
+        def row_to_csv(row):
+            out_fields = []
+            for v in row:
+                if v is None:
+                    out_fields.append('')
+                else:
+                    s = str(v)
+                    # Escape quotes by doubling
+                    if '"' in s:
+                        s = s.replace('"', '""')
+                    # Quote if contains delimiter, quote, or newline
+                    if any(ch in s for ch in [',', '"', '\n', '\r']):
+                        s = f'"{s}"'
+                    out_fields.append(s)
+            return ','.join(out_fields)
+
+        async def stream_csv():
+            # Header
+            header = ','.join(col_names) + '\n'
+            yield header
+            batch_size = 500
+            while True:
+                rows = cursor.fetchmany(batch_size)
+                if not rows:
+                    break
+                lines = [row_to_csv(r) for r in rows]
+                yield '\n'.join(lines) + '\n'
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+        # Filename pattern: table.yyyyMMdd.csv (UTC date)
+        filename = f"{base_name}.{datetime.utcnow().strftime('%Y%m%d')}.csv"
+        return StreamingResponse(stream_csv(), media_type="text/csv", headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        await logger.log_error("export_main_table", str(e), traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/backups/{base_name}/versions/{version_id}/export")
+async def export_backup_version_csv(base_name: str, version_id: int):
+    """Export a specific backup table version as CSV (excluding version/metadata columns)."""
+    try:
+        if not re.fullmatch(r"[A-Za-z0-9_]+", base_name):
+            raise HTTPException(status_code=400, detail="Invalid base name")
+        conn = db_manager.get_connection()
+        backup_table = f"{base_name}_backup"
+        if not db_manager.table_exists(conn, backup_table, db_manager.backup_schema):
+            conn.close()
+            raise HTTPException(status_code=404, detail="Backup table not found")
+        # Validate version exists
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT TOP 1 1 FROM [" + db_manager.backup_schema + "].[" + backup_table + "] WHERE version_id = ?",
+            version_id
+        )
+        if cursor.fetchone() is None:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Version not found")
+        # Columns excluding metadata
+        cols_meta = db_manager.get_table_columns(conn, backup_table, db_manager.backup_schema)
+        exclude_cols = {"ref_data_loadtime", "loadtype", "version_id"}
+        col_names = [c['name'] for c in cols_meta if c['name'].lower() not in exclude_cols]
+        if not col_names:
+            conn.close()
+            raise HTTPException(status_code=400, detail="No exportable columns")
+        select_sql = (
+            "SELECT " + ", ".join(f"[{c}]" for c in col_names) +
+            " FROM [" + db_manager.backup_schema + "].[" + backup_table + "] WHERE version_id = ?"
+        )
+        cursor.execute(select_sql, version_id)
+
+        def row_to_csv(row):
+            out_fields = []
+            for v in row:
+                if v is None:
+                    out_fields.append('')
+                else:
+                    s = str(v)
+                    if '"' in s:
+                        s = s.replace('"', '""')
+                    if any(ch in s for ch in [',', '"', '\n', '\r']):
+                        s = f'"{s}"'
+                    out_fields.append(s)
+            return ','.join(out_fields)
+
+        async def stream_csv():
+            header = ','.join(col_names) + '\n'
+            yield header
+            batch_size = 500
+            while True:
+                rows = cursor.fetchmany(batch_size)
+                if not rows:
+                    break
+                yield '\n'.join(row_to_csv(r) for r in rows) + '\n'
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+        # Filename excludes version id per request: table.yyyyMMdd.csv
+        filename = f"{base_name}.{datetime.utcnow().strftime('%Y%m%d')}.csv"
+        return StreamingResponse(stream_csv(), media_type="text/csv", headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        await logger.log_error("export_backup_version", str(e), traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/config")
 async def get_config():
