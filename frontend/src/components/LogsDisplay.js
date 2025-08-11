@@ -27,6 +27,7 @@ const LogsDisplay = () => {
   const [error, setError] = useState('');
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [expandedList, setExpandedList] = useState(false); // controls 10 vs 100 rows
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
@@ -184,20 +185,38 @@ const LogsDisplay = () => {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6">
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+        <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           System Logs
         </Typography>
-        
-        <Button
-          variant="outlined"
-          startIcon={<RefreshIcon />}
-          onClick={loadLogs}
-          disabled={loading}
-        >
-          {loading ? 'Loading...' : 'Refresh'}
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {logs.length > 10 && (
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => setExpandedList(e => !e)}
+            >
+              {expandedList ? 'Show 10' : 'Show 100'}
+            </Button>
+          )}
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={loadLogs}
+            disabled={loading}
+            size="small"
+          >
+            {loading ? 'Loading...' : 'Refresh'}
+          </Button>
+        </Box>
       </Box>
+      {logs.length > 0 && (
+        <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
+          {expandedList
+            ? `Showing last ${Math.min(100, logs.length)} log entries`
+            : `Showing last ${Math.min(100, logs.length)} log entries (displaying ${Math.min(10, logs.length)} – click 'Show 100' to expand)`}
+        </Typography>
+      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -224,64 +243,67 @@ const LogsDisplay = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {logs.map((log, index) => (
-                <React.Fragment key={index}>
-                  <TableRow hover>
-                    <TableCell>
-                      <IconButton
-                        size="small"
-                        onClick={() => toggleRowExpansion(index)}
-                      >
-                        {expandedRows.has(index) ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                      </IconButton>
-                    </TableCell>
-                    <TableCell>
-                      {(() => {
-                        const t = formatTimestampPair(log);
-                        return (
-                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.65rem' }}>
-                            {t.localDisp}{t.tz ? ` (${t.tz})` : ''}
-                            <br />
-                            <span style={{ color: '#666' }}>UTC: {t.utcDisp}</span>
-                          </Typography>
-                        );
-                      })()}
-                    </TableCell>
-                    <TableCell>
-                      <Chip 
-                        label={log.level} 
-                        color={getLevelColor(log.level)}
-                        size="small"
-                        variant="outlined"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {log.action_step}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography 
-                        variant="body2"
-                        sx={{
-                          color: log.level === 'ERROR' ? '#d32f2f' : 'inherit',
-                          fontWeight: log.level === 'ERROR' ? 'bold' : 'normal'
-                        }}
-                      >
-                        {formatMessage(log.message)}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                  
-                  <TableRow>
-                    <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={5}>
-                      <Collapse in={expandedRows.has(index)} timeout="auto" unmountOnExit>
-                        {renderExpandedContent(log)}
-                      </Collapse>
-                    </TableCell>
-                  </TableRow>
-                </React.Fragment>
-              ))}
+              {(() => {
+                const limit = expandedList ? 100 : 10;
+                const displayLogs = logs.slice(-limit); // last N logs
+                return displayLogs.map((log, idx) => (
+                  <React.Fragment key={idx}>
+                    <TableRow hover>
+                      <TableCell>
+                        <IconButton
+                          size="small"
+                          onClick={() => toggleRowExpansion(idx)}
+                        >
+                          {expandedRows.has(idx) ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                        </IconButton>
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const t = formatTimestampPair(log);
+                          return (
+                            <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.65rem' }}>
+                              {t.localDisp}{t.tz ? ` (${t.tz})` : ''}
+                              <br />
+                              <span style={{ color: '#666' }}>UTC: {t.utcDisp}</span>
+                            </Typography>
+                          );
+                        })()}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={log.level}
+                          color={getLevelColor(log.level)}
+                          size="small"
+                          variant="outlined"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {log.action_step}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: log.level === 'ERROR' ? '#d32f2f' : 'inherit',
+                            fontWeight: log.level === 'ERROR' ? 'bold' : 'normal'
+                          }}
+                        >
+                          {formatMessage(log.message)}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={5}>
+                        <Collapse in={expandedRows.has(idx)} timeout="auto" unmountOnExit>
+                          {renderExpandedContent(log)}
+                        </Collapse>
+                      </TableCell>
+                    </TableRow>
+                  </React.Fragment>
+                ));
+              })()}
             </TableBody>
           </Table>
         </TableContainer>
