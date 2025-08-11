@@ -1,0 +1,27 @@
+# Database Configuration
+db_host=localhost
+db_name=your_database_name
+db_user=your_username
+db_password=your_password
+db_odbc_driver=ODBC Driver 17 for SQL Server
+
+# Database Schemas
+data_schema=ref
+backup_schema=bkp
+validation_sp_schema=ref
+
+# Database Connection Pool
+DB_POOL_SIZE=5
+DB_MAX_RETRIES=3
+DB_RETRY_BACKOFF=0.5
+
+# Bulk Insert Options
+BULK_DISABLE_CODEPAGE=0
+
+# Demo/Development Settings
+DEMO_SLOW_PROGRESS=0
+
+# Batch Processing Settings
+# Number of rows to process in each batch during data insertion
+# Maximum value is 990 (SQL Server limit), default is 500 for stability
+INGEST_BATCH_SIZE=990

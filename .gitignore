@@ -48,3 +48,5 @@ temp/
 
 # Format definition files (ignore all, keep placeholder/example if needed)
 *.fmt
+/backend/C:\\data\\reference_data\\format
+/backend/C:\data\reference_data\format
