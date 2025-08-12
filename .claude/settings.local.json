@@ -4,7 +4,8 @@
       "Bash(python3:*)",
       "Bash(sudo python3:*)",
       "Bash(curl:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }

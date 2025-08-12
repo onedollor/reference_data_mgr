@@ -193,7 +193,7 @@
                                     <strong>Text Qualifier:</strong> <code class="bg-gray-100 px-1 rounded" x-text="config.default_delimiters?.text_qualifier"></code>
                                 </p>
                                 <p class="text-sm">
-                                    <strong>Row Delimiter:</strong> <code class="bg-gray-100 px-1 rounded" x-text="config.default_delimiters?.row_delimiter === '|\"\"\\r\\n' ? '|\"\"\\\\r\\\\n' : config.default_delimiters?.row_delimiter"></code>
+                                    <strong>Row Delimiter:</strong> <code class="bg-gray-100 px-1 rounded" x-text="formatDelimiter(config.default_delimiters?.row_delimiter)"></code>
                                 </p>
                             </div>
                         </div>
@@ -275,7 +275,7 @@
                                             </tr>
                                             <tr class="border-t border-gray-200">
                                                 <td class="px-4 py-2">Default Row Delimiter</td>
-                                                <td class="px-4 py-2"><code class="bg-gray-100 px-1 rounded" x-text="config.default_delimiters?.row_delimiter === '|\"\"\\r\\n' ? '|\"\"\\\\r\\\\n' : config.default_delimiters?.row_delimiter"></code></td>
+                                                <td class="px-4 py-2"><code class="bg-gray-100 px-1 rounded" x-text="formatDelimiter(config.default_delimiters?.row_delimiter)"></code></td>
                                             </tr>
                                             <tr class="border-t border-gray-200">
                                                 <td class="px-4 py-2">Default Text Qualifier</td>
@@ -308,7 +308,7 @@
                         <div class="mb-6">
                             <label class="block text-sm font-medium text-gray-700 mb-2">Select CSV File</label>
                             
-                            <div class="flex flex-wrap items-center gap-4">
+                            <div>
                                 <input 
                                     type="file" 
                                     accept=".csv" 
@@ -325,15 +325,6 @@
                                     <span class="material-icons mr-2">cloud_upload</span>
                                     Choose File
                                 </label>
-                                
-                                <button 
-                                    @click="handleUpload"
-                                    :disabled="!selectedFile || disabled || isUploading"
-                                    class="inline-flex items-center px-6 py-3 bg-td-green text-white rounded-lg hover:bg-td-green-dark transition-colors font-semibold shadow-td-button hover:shadow-td-button-hover disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <span class="material-icons mr-2" x-text="isUploading ? 'sync' : 'cloud_upload'" :class="isUploading ? 'animate-spin' : ''"></span>
-                                    <span x-text="isUploading ? 'Processing...' : 'Upload and Process'"></span>
-                                </button>
                             </div>
                             
                             <!-- File Info -->
@@ -514,6 +505,16 @@
                             </div>
                         </div>
 
+                        <!-- Upload Button -->
+                        <button 
+                            @click="handleUpload"
+                            :disabled="!selectedFile || disabled || isUploading"
+                            class="inline-flex items-center px-6 py-3 bg-td-green text-white rounded-lg hover:bg-td-green-dark transition-colors font-semibold shadow-td-button hover:shadow-td-button-hover disabled:opacity-50 disabled:cursor-not-allowed text-base"
+                        >
+                            <span class="material-icons mr-2" x-text="isUploading ? 'sync' : 'cloud_upload'" :class="isUploading ? 'animate-spin' : ''"></span>
+                            <span x-text="isUploading ? 'Processing...' : 'Upload and Process'"></span>
+                        </button>
+
                         <!-- Upload Progress -->
                         <template x-if="isUploading">
                             <div class="mt-4">
@@ -682,6 +683,15 @@
                                         </table>
                                     </div>
                                 </template>
+
+                                <template x-if="referenceData.length > 0">
+                                    <p class="text-sm text-gray-600 mt-4">
+                                        Showing <span x-text="referenceData.length"></span> configuration entries. Auto-refresh every 30 seconds.
+                                        <template x-if="refDataLastRefresh">
+                                            <span> Last updated: <span x-text="refDataLastRefresh.toLocaleTimeString()"></span>.</span>
+                                        </template>
+                                    </p>
+                                </template>
                             </div>
                         </template>
                     </div>
@@ -741,63 +751,63 @@
                                     </thead>
                                     <tbody class="max-h-96 overflow-y-auto">
                                         <template x-for="(log, idx) in getDisplayLogs()" :key="idx">
-                                            <template>
-                                                <tr class="border-t border-gray-200 hover:bg-gray-50">
-                                                    <td class="px-2 py-2">
-                                                        <button 
-                                                            @click="toggleLogExpansion(idx)"
-                                                            class="p-1 hover:bg-gray-200 rounded"
-                                                        >
-                                                            <span class="material-icons text-sm" x-text="expandedLogRows.has(idx) ? 'expand_less' : 'expand_more'"></span>
-                                                        </button>
-                                                    </td>
-                                                    <td class="px-4 py-2 font-mono text-xs">
-                                                        <div x-text="formatTimestamp(log.timestamp_local)"></div>
-                                                        <div class="text-gray-500" x-text="'UTC: ' + formatTimestamp(log.timestamp)"></div>
-                                                    </td>
-                                                    <td class="px-4 py-2">
-                                                        <span 
-                                                            class="inline-block px-2 py-1 rounded text-xs border"
-                                                            :class="getLogLevelClass(log.level)"
-                                                            x-text="log.level"
-                                                        ></span>
-                                                    </td>
-                                                    <td class="px-4 py-2" x-text="log.action_step"></td>
-                                                    <td class="px-4 py-2" :class="log.level === 'ERROR' ? 'text-red-700 font-semibold' : ''" x-text="formatLogMessage(log.message)"></td>
-                                                </tr>
-                                                <tr x-show="expandedLogRows.has(idx)" x-transition>
-                                                    <td colspan="5" class="px-0 py-0">
-                                                        <div class="p-4 bg-gray-50 border-t border-gray-200">
-                                                            <div class="mb-3">
-                                                                <h4 class="text-sm font-medium mb-2">Full Message:</h4>
-                                                                <div class="bg-white p-3 border border-gray-300 rounded font-mono text-xs whitespace-pre-wrap break-words" x-text="log.message"></div>
-                                                            </div>
-                                                            
-                                                            <template x-if="log.traceback">
-                                                                <div class="mb-3">
-                                                                    <h4 class="text-sm font-medium text-red-700 mb-2">Traceback:</h4>
-                                                                    <div class="bg-red-50 p-3 border border-red-300 rounded font-mono text-xs text-red-700 whitespace-pre-wrap break-words" x-text="log.traceback"></div>
-                                                                </div>
-                                                            </template>
-                                                            
-                                                            <template x-if="log.metadata && Object.keys(log.metadata).length > 0">
-                                                                <div>
-                                                                    <h4 class="text-sm font-medium mb-2">Additional Information:</h4>
-                                                                    <div class="bg-white p-3 border border-gray-300 rounded">
-                                                                        <template x-for="[key, value] in Object.entries(log.metadata)" :key="key">
-                                                                            <template x-if="value">
-                                                                                <div class="text-sm mb-1">
-                                                                                    <strong x-text="key + ':'"></strong> <span x-text="String(value)"></span>
-                                                                                </div>
-                                                                            </template>
-                                                                        </template>
-                                                                    </div>
-                                                                </div>
-                                                            </template>
+                                            <tr class="border-t border-gray-200 hover:bg-gray-50">
+                                                <td class="px-2 py-2">
+                                                    <button 
+                                                        @click="toggleLogExpansion(idx)"
+                                                        class="p-1 hover:bg-gray-200 rounded"
+                                                    >
+                                                        <span class="material-icons text-sm" x-text="expandedLogRows.has(idx) ? 'expand_less' : 'expand_more'"></span>
+                                                    </button>
+                                                </td>
+                                                <td class="px-4 py-2 font-mono text-xs">
+                                                    <div x-text="formatTimestamp(log.timestamp_local)"></div>
+                                                    <div class="text-gray-500" x-text="'UTC: ' + formatTimestamp(log.timestamp)"></div>
+                                                </td>
+                                                <td class="px-4 py-2">
+                                                    <span 
+                                                        class="inline-block px-2 py-1 rounded text-xs border"
+                                                        :class="getLogLevelClass(log.level)"
+                                                        x-text="log.level"
+                                                    ></span>
+                                                </td>
+                                                <td class="px-4 py-2" x-text="log.action_step"></td>
+                                                <td class="px-4 py-2" :class="log.level === 'ERROR' ? 'text-red-700 font-semibold' : ''" x-text="formatLogMessage(log.message)"></td>
+                                            </tr>
+                                        </template>
+                                        <template x-for="(log, idx) in getDisplayLogs()" :key="'expanded-' + idx">
+                                            <tr x-show="expandedLogRows.has(idx)" x-transition>
+                                                <td colspan="5" class="px-0 py-0">
+                                                    <div class="p-4 bg-gray-50 border-t border-gray-200">
+                                                        <div class="mb-3">
+                                                            <h4 class="text-sm font-medium mb-2">Full Message:</h4>
+                                                            <div class="bg-white p-3 border border-gray-300 rounded font-mono text-xs whitespace-pre-wrap break-words" x-text="log.message"></div>
                                                         </div>
-                                                    </td>
-                                                </tr>
-                                            </template>
+                                                        
+                                                        <template x-if="log.traceback">
+                                                            <div class="mb-3">
+                                                                <h4 class="text-sm font-medium text-red-700 mb-2">Traceback:</h4>
+                                                                <div class="bg-red-50 p-3 border border-red-300 rounded font-mono text-xs text-red-700 whitespace-pre-wrap break-words" x-text="log.traceback"></div>
+                                                            </div>
+                                                        </template>
+                                                        
+                                                        <template x-if="log.metadata && Object.keys(log.metadata).length > 0">
+                                                            <div>
+                                                                <h4 class="text-sm font-medium mb-2">Additional Information:</h4>
+                                                                <div class="bg-white p-3 border border-gray-300 rounded">
+                                                                    <template x-for="[key, value] in Object.entries(log.metadata)" :key="key">
+                                                                        <template x-if="value">
+                                                                            <div class="text-sm mb-1">
+                                                                                <strong x-text="key + ':'"></strong> <span x-text="String(value)"></span>
+                                                                            </div>
+                                                                        </template>
+                                                                    </template>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                </td>
+                                            </tr>
                                         </template>
                                     </tbody>
                                 </table>
@@ -838,6 +848,12 @@
                             <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm mb-4" x-text="actionMsg"></div>
                         </template>
 
+                        <template x-if="backups.length === 0 && !backupsLoading && !backupsError">
+                            <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm mb-4">
+                                No backup tables found. Backup tables are created when data is uploaded and processed.
+                            </div>
+                        </template>
+
                         <div class="border border-gray-200 rounded-lg overflow-hidden">
                             <table class="w-full text-sm">
                                 <thead class="bg-gray-50">
@@ -851,81 +867,81 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <template x-for="(backup, idx) in backups" :key="backup.backup_table">
-                                        <template>
-                                            <tr class="border-t border-gray-200 hover:bg-gray-50">
-                                                <td class="px-2 py-2">
-                                                    <button 
-                                                        @click="toggleBackupExpansion(idx)"
-                                                        class="p-1 hover:bg-gray-200 rounded"
-                                                    >
-                                                        <span class="material-icons text-sm" x-text="expandedBackupRows.has(idx) ? 'expand_less' : 'expand_more'"></span>
-                                                    </button>
-                                                </td>
-                                                <td class="px-4 py-2">
-                                                    <div class="font-mono text-xs" x-text="backup.backup_table"></div>
-                                                    <template x-if="!(backup.has_main && backup.has_stage)">
-                                                        <div class="text-xs text-red-600">Missing related table(s)</div>
+                                    <template x-for="(backup, idx) in backups" :key="idx">
+                                        <tr class="border-t border-gray-200 hover:bg-gray-50">
+                                            <td class="px-2 py-2">
+                                                <button 
+                                                    @click="toggleBackupExpansion(idx)"
+                                                    class="p-1 hover:bg-gray-200 rounded"
+                                                >
+                                                    <span class="material-icons text-sm" x-text="expandedBackupRows.has(idx) ? 'expand_less' : 'expand_more'"></span>
+                                                </button>
+                                            </td>
+                                            <td class="px-4 py-2">
+                                                <div class="font-mono text-xs" x-text="backup.backup_table"></div>
+                                                <template x-if="!(backup.has_main && backup.has_stage)">
+                                                    <div class="text-xs text-red-600">Missing related table(s)</div>
+                                                </template>
+                                            </td>
+                                            <td class="px-4 py-2">
+                                                <span 
+                                                    class="inline-block px-2 py-1 rounded text-xs mr-1"
+                                                    :class="backup.has_main ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                                                    x-text="backup.has_main ? 'Main OK' : 'Main MISSING'"
+                                                ></span>
+                                                <span 
+                                                    class="inline-block px-2 py-1 rounded text-xs"
+                                                    :class="backup.has_stage ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'"
+                                                    x-text="backup.has_stage ? 'Stage OK' : 'Stage MISSING'"
+                                                ></span>
+                                            </td>
+                                            <td class="px-4 py-2" x-text="backup.version_count"></td>
+                                            <td class="px-4 py-2" x-text="backup.latest_version ?? '-'"></td>
+                                            <td class="px-4 py-2">
+                                                <div class="flex gap-2">
+                                                    <template x-if="backup.latest_version && backup.has_main && backup.has_stage">
+                                                        <button 
+                                                            @click="viewBackupVersion(backup.base_name, backup.latest_version)"
+                                                            class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
+                                                        >
+                                                            View Latest
+                                                        </button>
                                                     </template>
-                                                </td>
-                                                <td class="px-4 py-2">
-                                                    <span 
-                                                        class="inline-block px-2 py-1 rounded text-xs mr-1"
-                                                        :class="backup.has_main ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
-                                                        x-text="backup.has_main ? 'Main OK' : 'Main MISSING'"
-                                                    ></span>
-                                                    <span 
-                                                        class="inline-block px-2 py-1 rounded text-xs"
-                                                        :class="backup.has_stage ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'"
-                                                        x-text="backup.has_stage ? 'Stage OK' : 'Stage MISSING'"
-                                                    ></span>
-                                                </td>
-                                                <td class="px-4 py-2" x-text="backup.version_count"></td>
-                                                <td class="px-4 py-2" x-text="backup.latest_version ?? '-'"></td>
-                                                <td class="px-4 py-2">
-                                                    <div class="flex gap-2">
-                                                        <template x-if="backup.latest_version && backup.has_main && backup.has_stage">
-                                                            <button 
-                                                                @click="viewBackupVersion(backup.base_name, backup.latest_version)"
-                                                                class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
-                                                            >
-                                                                View Latest
-                                                            </button>
-                                                        </template>
-                                                        <template x-if="backup.has_main && backup.has_stage">
-                                                            <button 
-                                                                @click="exportBackupMain(backup.base_name)"
-                                                                class="px-2 py-1 text-xs border border-td-dark-green text-td-dark-green rounded hover:bg-td-dark-green hover:text-white"
-                                                            >
-                                                                Export CSV
-                                                            </button>
-                                                        </template>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                            <tr x-show="expandedBackupRows.has(idx)" x-transition>
-                                                <td colspan="6" class="px-0 py-0">
-                                                    <div class="p-4 bg-gray-50 border-t border-gray-200">
-                                                        <h4 class="text-sm font-medium mb-2">Versions</h4>
-                                                        <template x-if="backup.version_count === 0">
-                                                            <p class="text-sm text-gray-600">No versions</p>
-                                                        </template>
-                                                        <template x-if="backup.version_count > 0">
-                                                            <div class="flex flex-wrap gap-2">
-                                                                <template x-for="v in Array.from({ length: backup.version_count }, (_, i) => backup.latest_version - i)" :key="v">
-                                                                    <button 
-                                                                        @click="viewBackupVersion(backup.base_name, v)"
-                                                                        class="px-3 py-1 text-xs rounded border cursor-pointer hover:bg-blue-50"
-                                                                        :class="selectedVersion?.version_id === v && selectedVersion?.base_name === backup.base_name ? 'bg-blue-100 border-blue-300' : 'bg-white border-gray-300'"
-                                                                        x-text="'v' + v"
-                                                                    ></button>
-                                                                </template>
-                                                            </div>
-                                                        </template>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        </template>
+                                                    <template x-if="backup.has_main && backup.has_stage">
+                                                        <button 
+                                                            @click="exportBackupMain(backup.base_name)"
+                                                            class="px-2 py-1 text-xs border border-td-dark-green text-td-dark-green rounded hover:bg-td-dark-green hover:text-white"
+                                                        >
+                                                            Export CSV
+                                                        </button>
+                                                    </template>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    <template x-for="(backup, idx) in backups" :key="'expanded-' + idx">
+                                        <tr x-show="expandedBackupRows.has(idx)" x-transition>
+                                            <td colspan="6" class="px-0 py-0">
+                                                <div class="p-4 bg-gray-50 border-t border-gray-200">
+                                                    <h4 class="text-sm font-medium mb-2">Versions for <span x-text="backup.backup_table"></span></h4>
+                                                    <template x-if="backup.version_count === 0">
+                                                        <p class="text-sm text-gray-600">No versions</p>
+                                                    </template>
+                                                    <template x-if="backup.version_count > 0">
+                                                        <div class="flex flex-wrap gap-2">
+                                                            <template x-for="v in Array.from({ length: backup.version_count }, (_, i) => backup.latest_version - i)" :key="v">
+                                                                <button 
+                                                                    @click="viewBackupVersion(backup.base_name, v)"
+                                                                    class="px-3 py-1 text-xs rounded border cursor-pointer hover:bg-blue-50"
+                                                                    :class="selectedVersion?.version_id === v && selectedVersion?.base_name === backup.base_name ? 'bg-blue-100 border-blue-300' : 'bg-white border-gray-300'"
+                                                                    x-text="'v' + v"
+                                                                ></button>
+                                                            </template>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </td>
+                                        </tr>
                                     </template>
                                 </tbody>
                             </table>
@@ -1235,6 +1251,8 @@
                         await this.loadConfiguration();
                     }
                     this.startLogPolling();
+                    this.startReferenceDataPolling();
+                    await this.loadBackups();
                 },
                 
                 async checkSystemHealth() {
@@ -1275,6 +1293,7 @@
                 },
                 
                 formatDelimiter(option) {
+                    if (!option) return '';
                     const map = {
                         '\r': '\\r',
                         '\n': '\\n', 
@@ -1602,22 +1621,25 @@
                     
                     try {
                         const ts = Date.now();
-                        const response = await fetch(`${API_BASE_URL}/logs?ts=${ts}`, {
-                            cache: 'no-store',
-                            headers: {
-                                'Cache-Control': 'no-cache',
-                                'Pragma': 'no-cache'
-                            }
-                        });
+                        console.log('Loading logs from:', `${API_BASE_URL}/logs?ts=${ts}`);
+                        
+                        const response = await fetch(`${API_BASE_URL}/logs?ts=${ts}`);
+                        
+                        console.log('Logs response status:', response.status);
                         
                         if (response.ok) {
                             const result = await response.json();
+                            console.log('Logs loaded successfully:', result.logs?.length, 'entries');
+                            console.log('First log entry:', result.logs?.[0]);
                             this.logs = result.logs || [];
                             this.logsLastUpdated = new Date();
+                            console.log('this.logs after assignment:', this.logs.length, 'entries');
                         } else {
-                            throw new Error('Failed to load logs');
+                            console.error('Logs response not ok:', response.status, response.statusText);
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                         }
                     } catch (error) {
+                        console.error('Error loading logs:', error);
                         this.logsError = error.message;
                     } finally {
                         this.logsLoading = false;
@@ -1627,6 +1649,11 @@
                 startLogPolling() {
                     this.loadLogs();
                     setInterval(() => this.loadLogs(), 10000);
+                },
+
+                startReferenceDataPolling() {
+                    this.loadReferenceDataConfig();
+                    setInterval(() => this.loadReferenceDataConfig(), 30000); // Refresh every 30 seconds
                 },
                 
                 toggleLogExpansion(index) {
@@ -1669,8 +1696,11 @@
                 
                 getDisplayLogs() {
                     const limit = this.expandedLogsList ? 100 : 10;
-                    return this.logs.slice(-limit);
+                    const displayLogs = this.logs.slice(-limit);
+                    console.log('getDisplayLogs called:', 'total logs:', this.logs.length, 'limit:', limit, 'displaying:', displayLogs.length);
+                    return displayLogs;
                 },
+
                 
                 // Backups/Rollback
                 async loadBackups() {
@@ -1678,11 +1708,17 @@
                     this.backupsError = '';
                     
                     try {
+                        console.log('Loading backups from:', `${API_BASE_URL}/backups`);
                         const response = await fetch(`${API_BASE_URL}/backups`);
-                        if (!response.ok) throw new Error('Failed to load backups');
+                        console.log('Backups response status:', response.status);
+                        
+                        if (!response.ok) throw new Error(`Failed to load backups: ${response.status}`);
                         const data = await response.json();
+                        console.log('Backups data:', data);
                         this.backups = data.backups || [];
+                        console.log('Backups after assignment:', this.backups.length, 'entries');
                     } catch (error) {
+                        console.error('Error loading backups:', error);
                         this.backupsError = error.message;
                     } finally {
                         this.backupsLoading = false;
