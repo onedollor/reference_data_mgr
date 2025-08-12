@@ -17,6 +17,11 @@
     <!-- Material Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     
+    <!-- Configuration -->
+    <script>
+        const API_BASE_URL = 'http://localhost:8000';
+    </script>
+    
     <!-- Custom Tailwind Configuration -->
     <script>
         tailwind.config = {
@@ -348,14 +353,15 @@
             <div class="p-6">
                 <h2 class="text-lg font-semibold text-gray-800 mb-4">System Status</h2>
                 
-                <template x-if="systemStatus === 'loading'">
+                <!-- Combined System Status -->
+                <template x-if="systemStatus === 'loading' || dbStatus === 'loading'">
                     <div class="flex items-center mb-4">
                         <span class="material-icons text-td-green animate-spin mr-3 text-xl">sync</span>
                         <span class="text-sm text-gray-600">Checking system status...</span>
                     </div>
                 </template>
                 
-                <template x-if="systemStatus === 'healthy'">
+                <template x-if="systemStatus === 'healthy' && dbStatus === 'healthy'">
                     <div class="bg-td-green text-white px-4 py-3 rounded-lg flex items-center mb-4">
                         <span class="material-icons mr-2">check_circle</span>
                         <span class="font-medium">System is healthy and ready to process files</span>
@@ -368,9 +374,16 @@
                         <span class="font-medium">System is not responding. Please check the backend service.</span>
                     </div>
                 </template>
+                
+                <template x-if="systemStatus === 'healthy' && dbStatus === 'error'">
+                    <div class="bg-red-500 text-white px-4 py-3 rounded-lg flex items-center mb-4">
+                        <span class="material-icons mr-2">error</span>
+                        <span class="font-medium">Database connection failed. Please check database service.</span>
+                    </div>
+                </template>
 
                 <!-- System Configuration - Inside System Status Card -->
-                <template x-if="systemStatus === 'healthy' && config">
+                <template x-if="systemStatus === 'healthy' && dbStatus === 'healthy' && config">
                     <div class="mt-4">
                         <div class="flex justify-between items-center mb-4">
                             <h3 class="text-lg font-semibold">System Configuration</h3>
@@ -507,8 +520,8 @@
             </div>
         </div>
 
-        <!-- Main Content - Only show when system is healthy -->
-        <template x-if="systemStatus === 'healthy' && config">
+        <!-- Main Content - Only show when system and database are healthy -->
+        <template x-if="systemStatus === 'healthy' && dbStatus === 'healthy' && config">
             <div>
                 <!-- File Upload Section -->
                 <div class="bg-white rounded-xl shadow-td-card border border-gray-200 mb-6">
@@ -1478,11 +1491,10 @@
 
     <script>
         function app() {
-            const API_BASE_URL = 'http://localhost:8000';
-            
             return {
                 // System state
                 systemStatus: 'loading',
+                dbStatus: 'loading',
                 config: null,
                 showConfigDetails: false,
                 
@@ -1555,10 +1567,12 @@
                 
                 async init() {
                     await this.checkSystemHealth();
+                    await this.checkDatabaseConnection();
                     if (this.systemStatus === 'healthy') {
                         await this.loadConfiguration();
                     }
                     this.startLogPolling();
+                    this.startHealthPolling(); // Start periodic health checks
                     await this.loadReferenceDataConfig(); // Load only on page init
                     await this.loadBackups();
                 },
@@ -1573,6 +1587,22 @@
                         }
                     } catch (error) {
                         this.systemStatus = 'error';
+                    }
+                },
+
+                async checkDatabaseConnection() {
+                    try {
+                        const response = await fetch(`${API_BASE_URL}/health/database`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            // If backend returns an error status, respect it
+                            this.dbStatus = data.status === 'healthy' ? 'healthy' : 'error';
+                        } else {
+                            this.dbStatus = 'error';
+                        }
+                    } catch (error) {
+                        console.error('Database connection check failed:', error);
+                        this.dbStatus = 'error';
                     }
                 },
                 
@@ -1958,6 +1988,19 @@
                 startLogPolling() {
                     this.loadLogs();
                     setInterval(() => this.loadLogs(), 10000);
+                },
+
+                startHealthPolling() {
+                    // Check health status every 30 seconds
+                    setInterval(async () => {
+                        await this.checkSystemHealth();
+                        await this.checkDatabaseConnection();
+                        
+                        // If system becomes healthy and we don't have config yet, load it
+                        if (this.systemStatus === 'healthy' && !this.config) {
+                            await this.loadConfiguration();
+                        }
+                    }, 30000);
                 },
 
                 

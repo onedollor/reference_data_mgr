@@ -93,6 +93,33 @@ async def root():
         "status": "healthy"
     }
 
+@app.get("/health/database")
+async def database_health():
+    """Check database connection health"""
+    try:
+        # Test database connection
+        connection = db_manager.get_connection()
+        
+        # Run a simple query to verify connectivity
+        cursor = connection.cursor()
+        cursor.execute("SELECT 1 as test")
+        result = cursor.fetchone()
+        cursor.close()
+        connection.close()
+        
+        if result and result[0] == 1:
+            return {"status": "healthy"}
+        else:
+            return {"status": "error", "message": "Database query failed"}
+            
+    except Exception as e:
+        error_msg = f"Database connection failed: {str(e)}"
+        try:
+            await logger.log_error("database_health", error_msg)
+        except Exception:
+            pass  # Don't fail if logging fails
+        return {"status": "error", "message": error_msg}
+
 # ---------------- Rollback / Backup APIs ----------------
 @app.get("/backups")
 async def list_backups():
