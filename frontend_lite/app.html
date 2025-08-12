@@ -856,92 +856,94 @@
 
                         <div class="border border-gray-200 rounded-lg overflow-hidden">
                             <table class="w-full text-sm">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="w-8 px-2 py-2"></th>
-                                        <th class="px-4 py-2 text-left">Backup Table</th>
-                                        <th class="px-4 py-2 text-left">Main/Stage</th>
-                                        <th class="px-4 py-2 text-left">Versions</th>
-                                        <th class="px-4 py-2 text-left">Latest</th>
-                                        <th class="px-4 py-2 text-left">Actions</th>
-                                    </tr>
-                                </thead>
                                 <tbody>
+                                    <tbody>
+                                        <thead class="bg-gray-50">
+                                            <tr>
+                                                <th class="w-8 px-2 py-2"></th>
+                                                <th class="px-4 py-2 text-left">Backup Table</th>
+                                                <th class="px-4 py-2 text-left">Main/Stage</th>
+                                                <th class="px-4 py-2 text-left">Versions</th>
+                                                <th class="px-4 py-2 text-left">Latest</th>
+                                                <th class="px-4 py-2 text-left">Actions</th>
+                                            </tr>
+                                        </thead>
+                                    </tbody>                                    
                                     <template x-for="(backup, idx) in backups" :key="idx">
-                                        <tr class="border-t border-gray-200 hover:bg-gray-50">
-                                            <td class="px-2 py-2">
-                                                <button 
-                                                    @click="toggleBackupExpansion(idx)"
-                                                    class="p-1 hover:bg-gray-200 rounded"
-                                                >
-                                                    <span class="material-icons text-sm" x-text="expandedBackupRows.has(idx) ? 'expand_less' : 'expand_more'"></span>
-                                                </button>
-                                            </td>
-                                            <td class="px-4 py-2">
-                                                <div class="font-mono text-xs" x-text="backup.backup_table"></div>
-                                                <template x-if="!(backup.has_main && backup.has_stage)">
-                                                    <div class="text-xs text-red-600">Missing related table(s)</div>
-                                                </template>
-                                            </td>
-                                            <td class="px-4 py-2">
-                                                <span 
-                                                    class="inline-block px-2 py-1 rounded text-xs mr-1"
-                                                    :class="backup.has_main ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
-                                                    x-text="backup.has_main ? 'Main OK' : 'Main MISSING'"
-                                                ></span>
-                                                <span 
-                                                    class="inline-block px-2 py-1 rounded text-xs"
-                                                    :class="backup.has_stage ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'"
-                                                    x-text="backup.has_stage ? 'Stage OK' : 'Stage MISSING'"
-                                                ></span>
-                                            </td>
-                                            <td class="px-4 py-2" x-text="backup.version_count"></td>
-                                            <td class="px-4 py-2" x-text="backup.latest_version ?? '-'"></td>
-                                            <td class="px-4 py-2">
-                                                <div class="flex gap-2">
-                                                    <template x-if="backup.latest_version && backup.has_main && backup.has_stage">
-                                                        <button 
-                                                            @click="viewBackupVersion(backup.base_name, backup.latest_version)"
-                                                            class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
-                                                        >
-                                                            View Latest
-                                                        </button>
+                                        <tbody>
+                                            <tr class="border-t border-gray-200 hover:bg-gray-50">
+                                                <td class="px-2 py-2">
+                                                    <button 
+                                                        @click="toggleBackupExpansion(idx)"
+                                                        class="p-1 hover:bg-gray-200 rounded"
+                                                    >
+                                                        <span class="material-icons text-sm" x-text="expandedBackupRows.has(idx) ? 'expand_less' : 'expand_more'"></span>
+                                                    </button>
+                                                </td>
+                                                <td class="px-4 py-2">
+                                                    <div class="font-mono text-xs" x-text="backup.backup_table"></div>
+                                                    <template x-if="!(backup.has_main && backup.has_stage)">
+                                                        <div class="text-xs text-red-600">Missing related table(s)</div>
                                                     </template>
-                                                    <template x-if="backup.has_main && backup.has_stage">
-                                                        <button 
-                                                            @click="exportBackupMain(backup.base_name)"
-                                                            class="px-2 py-1 text-xs border border-td-dark-green text-td-dark-green rounded hover:bg-td-dark-green hover:text-white"
-                                                        >
-                                                            Export CSV
-                                                        </button>
-                                                    </template>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    </template>
-                                    <template x-for="(backup, idx) in backups" :key="'expanded-' + idx">
-                                        <tr x-show="expandedBackupRows.has(idx)" x-transition>
-                                            <td colspan="6" class="px-0 py-0">
-                                                <div class="p-4 bg-gray-50 border-t border-gray-200">
-                                                    <h4 class="text-sm font-medium mb-2">Versions for <span x-text="backup.backup_table"></span></h4>
-                                                    <template x-if="backup.version_count === 0">
-                                                        <p class="text-sm text-gray-600">No versions</p>
-                                                    </template>
-                                                    <template x-if="backup.version_count > 0">
-                                                        <div class="flex flex-wrap gap-2">
-                                                            <template x-for="v in Array.from({ length: backup.version_count }, (_, i) => backup.latest_version - i)" :key="v">
-                                                                <button 
-                                                                    @click="viewBackupVersion(backup.base_name, v)"
-                                                                    class="px-3 py-1 text-xs rounded border cursor-pointer hover:bg-blue-50"
-                                                                    :class="selectedVersion?.version_id === v && selectedVersion?.base_name === backup.base_name ? 'bg-blue-100 border-blue-300' : 'bg-white border-gray-300'"
-                                                                    x-text="'v' + v"
-                                                                ></button>
-                                                            </template>
-                                                        </div>
-                                                    </template>
-                                                </div>
-                                            </td>
-                                        </tr>
+                                                </td>
+                                                <td class="px-4 py-2">
+                                                    <span 
+                                                        class="inline-block px-2 py-1 rounded text-xs mr-1"
+                                                        :class="backup.has_main ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                                                        x-text="backup.has_main ? 'Main OK' : 'Main MISSING'"
+                                                    ></span>
+                                                    <span 
+                                                        class="inline-block px-2 py-1 rounded text-xs"
+                                                        :class="backup.has_stage ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'"
+                                                        x-text="backup.has_stage ? 'Stage OK' : 'Stage MISSING'"
+                                                    ></span>
+                                                </td>
+                                                <td class="px-4 py-2" x-text="backup.version_count"></td>
+                                                <td class="px-4 py-2" x-text="backup.latest_version ?? '-'"></td>
+                                                <td class="px-4 py-2">
+                                                    <div class="flex gap-2">
+                                                        <template x-if="backup.latest_version && backup.has_main && backup.has_stage">
+                                                            <button 
+                                                                @click="viewBackupVersion(backup.base_name, backup.latest_version)"
+                                                                class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
+                                                            >
+                                                                View Latest
+                                                            </button>
+                                                        </template>
+                                                        <template x-if="backup.has_main && backup.has_stage">
+                                                            <button 
+                                                                @click="exportBackupMain(backup.base_name)"
+                                                                class="px-2 py-1 text-xs border border-td-dark-green text-td-dark-green rounded hover:bg-td-dark-green hover:text-white"
+                                                            >
+                                                                Export CSV
+                                                            </button>
+                                                        </template>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            <tr x-show="expandedBackupRows.has(idx)" x-transition>
+                                                <td colspan="6" class="px-0 py-0">
+                                                    <div class="p-4 bg-gray-50 border-t border-gray-200">
+                                                        <h4 class="text-sm font-medium mb-2">Versions for <span x-text="backup.backup_table"></span></h4>
+                                                        <template x-if="backup.version_count === 0">
+                                                            <p class="text-sm text-gray-600">No versions</p>
+                                                        </template>
+                                                        <template x-if="backup.version_count > 0">
+                                                            <div class="flex flex-wrap gap-2">
+                                                                <template x-for="v in Array.from({ length: backup.version_count }, (_, i) => backup.latest_version - i)" :key="v">
+                                                                    <button 
+                                                                        @click="viewBackupVersion(backup.base_name, v)"
+                                                                        class="px-3 py-1 text-xs rounded border cursor-pointer hover:bg-blue-50"
+                                                                        :class="selectedVersion?.version_id === v && selectedVersion?.base_name === backup.base_name ? 'bg-blue-100 border-blue-300' : 'bg-white border-gray-300'"
+                                                                        x-text="'v' + v"
+                                                                    ></button>
+                                                                </template>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </tbody>
                                     </template>
                                 </tbody>
                             </table>
