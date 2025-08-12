@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#54B848" />
+    <meta name="description" content="Reference Data Auto Ingest System - Lite Version" />
+    <title>Reference Data Auto Ingest System - Lite</title>
+    
+    <!-- Material Icons for cloud upload icon -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: "Helvetica Neue", "Arial", sans-serif;
+            background-color: #f8f9fa;
+            color: #2c2c2c;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            min-height: 100vh;
+        }
+        
+        /* TD-Style Header */
+        .header {
+            background-color: #54B848;
+            border-bottom: 4px solid #003F2D;
+            color: white;
+            padding: 24px 32px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            color: rgba(255,255,255,0.9);
+            font-size: 14px;
+            margin: 0;
+        }
+        
+        /* Container */
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 32px 24px;
+        }
+        
+        /* Card Styles */
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            border: 1px solid #e0e0e0;
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+        
+        .card-content {
+            padding: 24px;
+        }
+        
+        .card h2 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2c2c2c;
+            margin-bottom: 16px;
+        }
+        
+        /* File Upload Styles */
+        .file-upload-section {
+            margin-bottom: 24px;
+        }
+        
+        .file-upload-label {
+            font-size: 16px;
+            font-weight: 500;
+            color: #2c2c2c;
+            margin-bottom: 8px;
+            display: block;
+        }
+        
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .file-button, .upload-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            text-transform: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+            text-decoration: none;
+        }
+        
+        .file-button {
+            background: transparent;
+            border: 2px solid #54B848;
+            color: #54B848;
+        }
+        
+        .file-button:hover {
+            background: rgba(84, 184, 72, 0.04);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .upload-button {
+            background: #54B848;
+            color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            margin-left: 16px;
+        }
+        
+        .upload-button:hover {
+            background: #3A9B2F;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.25);
+        }
+        
+        .upload-button:disabled {
+            background: #cccccc;
+            color: #666666;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        .file-button:disabled {
+            border-color: #cccccc;
+            color: #666666;
+            cursor: not-allowed;
+        }
+        
+        /* Material Icon styling */
+        .material-icons {
+            font-size: 20px;
+        }
+        
+        /* File info display */
+        .file-info {
+            margin-top: 12px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #666666;
+        }
+        
+        /* Progress bar */
+        .progress-container {
+            margin-top: 16px;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #54B848;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        
+        .progress-text {
+            margin-top: 8px;
+            font-size: 14px;
+            color: #666666;
+        }
+        
+        /* Alert styles */
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-top: 16px;
+            font-size: 14px;
+        }
+        
+        .alert-error {
+            background: #ffebee;
+            border: 1px solid #f44336;
+            color: #c62828;
+        }
+        
+        .alert-success {
+            background: #e8f5e8;
+            border: 1px solid #54B848;
+            color: #2e7d32;
+        }
+        
+        /* System status */
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .status-healthy {
+            background: #54B848;
+            color: white;
+        }
+        
+        .status-loading {
+            background: #f0f0f0;
+            color: #666666;
+        }
+        
+        .status-error {
+            background: #f44336;
+            color: white;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 16px;
+            }
+            
+            .header {
+                padding: 16px 24px;
+            }
+            
+            .card-content {
+                padding: 16px;
+            }
+            
+            .upload-button {
+                margin-left: 0;
+                margin-top: 12px;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- TD-Style Header -->
+    <div class="header">
+        <h1>TD Reference Data Management - Lite</h1>
+        <p>Automated CSV Data Ingestion System ***Limited For Reference Data Only***</p>
+    </div>
+
+    <div class="container">
+        <!-- System Status Card -->
+        <div class="card">
+            <div class="card-content">
+                <h2>System Status</h2>
+                <div id="systemStatus" class="status-indicator status-loading">
+                    <span class="material-icons">sync</span>
+                    Checking system status...
+                </div>
+            </div>
+        </div>
+
+        <!-- File Upload Card -->
+        <div class="card">
+            <div class="card-content">
+                <h2>File Upload & Configuration</h2>
+                
+                <div class="file-upload-section">
+                    <label class="file-upload-label">Select CSV File</label>
+                    
+                    <div class="file-input-wrapper">
+                        <input type="file" id="fileInput" class="file-input" accept=".csv" />
+                        <label for="fileInput" class="file-button">
+                            <span class="material-icons">cloud_upload</span>
+                            Choose File
+                        </label>
+                        
+                        <button id="uploadButton" class="upload-button" disabled>
+                            <span class="material-icons">cloud_upload</span>
+                            Upload and Process
+                        </button>
+                    </div>
+                    
+                    <div id="fileInfo" class="file-info" style="display: none;"></div>
+                    <div id="errorMessage" class="alert alert-error" style="display: none;"></div>
+                    <div id="successMessage" class="alert alert-success" style="display: none;"></div>
+                    
+                    <div id="progressContainer" class="progress-container" style="display: none;">
+                        <div class="progress-bar">
+                            <div id="progressFill" class="progress-fill"></div>
+                        </div>
+                        <div id="progressText" class="progress-text">Uploading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // System status check
+        async function checkSystemHealth() {
+            try {
+                const response = await fetch('/');
+                const statusElement = document.getElementById('systemStatus');
+                
+                if (response.ok) {
+                    statusElement.className = 'status-indicator status-healthy';
+                    statusElement.innerHTML = '<span class="material-icons">check_circle</span>System is healthy and ready to process files';
+                } else {
+                    statusElement.className = 'status-indicator status-error';
+                    statusElement.innerHTML = '<span class="material-icons">error</span>System is not responding';
+                }
+            } catch (error) {
+                const statusElement = document.getElementById('systemStatus');
+                statusElement.className = 'status-indicator status-error';
+                statusElement.innerHTML = '<span class="material-icons">error</span>System is not responding';
+            }
+        }
+
+        // File handling
+        const fileInput = document.getElementById('fileInput');
+        const uploadButton = document.getElementById('uploadButton');
+        const fileInfo = document.getElementById('fileInfo');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+
+        let selectedFile = null;
+
+        fileInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            
+            // Hide previous messages
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+            progressContainer.style.display = 'none';
+            
+            if (file) {
+                if (!file.name.toLowerCase().endsWith('.csv')) {
+                    showError('Only CSV files are supported');
+                    uploadButton.disabled = true;
+                    fileInfo.style.display = 'none';
+                    selectedFile = null;
+                    return;
+                }
+                
+                selectedFile = file;
+                uploadButton.disabled = false;
+                
+                fileInfo.innerHTML = `Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+                fileInfo.style.display = 'block';
+            } else {
+                selectedFile = null;
+                uploadButton.disabled = true;
+                fileInfo.style.display = 'none';
+            }
+        });
+
+        uploadButton.addEventListener('click', async function() {
+            if (!selectedFile) return;
+            
+            // Hide previous messages
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+            
+            // Show progress
+            progressContainer.style.display = 'block';
+            progressFill.style.width = '0%';
+            progressText.textContent = 'Uploading...';
+            
+            // Disable controls
+            uploadButton.disabled = true;
+            fileInput.disabled = true;
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+                
+                // Simulate progress for demonstration
+                let progress = 0;
+                const progressInterval = setInterval(() => {
+                    progress += Math.random() * 30;
+                    if (progress > 90) progress = 90;
+                    progressFill.style.width = progress + '%';
+                    progressText.textContent = `Uploading... ${Math.round(progress)}%`;
+                }, 100);
+                
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                clearInterval(progressInterval);
+                progressFill.style.width = '100%';
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    progressText.textContent = 'Upload completed successfully!';
+                    showSuccess('File uploaded and processing started successfully');
+                    
+                    // Reset form after success
+                    setTimeout(() => {
+                        resetForm();
+                    }, 3000);
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Upload failed');
+                }
+                
+            } catch (error) {
+                showError(`Upload failed: ${error.message}`);
+                progressContainer.style.display = 'none';
+            } finally {
+                // Re-enable controls
+                uploadButton.disabled = false;
+                fileInput.disabled = false;
+            }
+        });
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+
+        function showSuccess(message) {
+            successMessage.textContent = message;
+            successMessage.style.display = 'block';
+        }
+
+        function resetForm() {
+            selectedFile = null;
+            fileInput.value = '';
+            uploadButton.disabled = true;
+            fileInfo.style.display = 'none';
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+            progressContainer.style.display = 'none';
+        }
+
+        // Initialize on page load
+        checkSystemHealth();
+    </script>
+</body>
+</html>
