@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#54B848" />
     <meta name="description" content="Reference Data Auto Ingest System - Alpine.js + Tailwind Version" />
     <title>Reference Data Auto Ingest System</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -205,43 +206,29 @@
             outline: none;
         }
         
-        /* MUI-style filter selects for table headers */
-        .mui-filter-select {
-            position: relative;
-            display: inline-flex;
-            align-items: center;
-            width: 100%;
-            font-family: "Roboto", "Helvetica", "Arial", sans-serif;
-            font-weight: 400;
-            font-size: 0.75rem;
-            line-height: 1.43;
-            letter-spacing: 0.01071em;
-            color: white;
-            background-color: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.3);
+        /* MUI-style filter container */
+        .mui-filter-container {
+            background-color: #f5f5f5;
+            border: 1px solid rgba(0, 0, 0, 0.23);
             border-radius: 4px;
-            padding: 4px 8px;
-            cursor: pointer;
-            transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms;
+            position: relative;
+            width: 100%;
         }
         
-        .mui-filter-select:hover {
-            background-color: rgba(255, 255, 255, 0.15);
-            border-color: rgba(255, 255, 255, 0.5);
+        .mui-filter-container.active {
+            border-color: #1976d2;
+            border-width: 2px;
         }
         
-        .mui-filter-select:focus {
-            background-color: white;
-            color: rgba(0, 0, 0, 0.87);
-            border-color: #54B848;
-            outline: none;
+        .mui-filter-container.has-values {
+            border-color: #ffc107;
+            background-color: #fff3cd;
         }
         
-        .mui-filter-select.active {
-            background-color: #ffc107;
-            color: rgba(0, 0, 0, 0.87);
-            border-color: #ff8f00;
-            font-weight: 500;
+        /* Combined filter control */
+        .mui-combined-filter {
+            position: relative;
+            width: 100%;
         }
         
         .mui-filter-input {
@@ -251,40 +238,92 @@
             font-size: 0.75rem;
             line-height: 1.43;
             letter-spacing: 0.01071em;
-            color: white;
-            background-color: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 4px;
-            padding: 4px 8px;
-            transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms;
-        }
-        
-        .mui-filter-input::placeholder {
-            color: rgba(255, 255, 255, 0.7);
-            opacity: 1;
-        }
-        
-        .mui-filter-input:hover {
-            background-color: rgba(255, 255, 255, 0.15);
-            border-color: rgba(255, 255, 255, 0.5);
-        }
-        
-        .mui-filter-input:focus {
-            background-color: white;
             color: rgba(0, 0, 0, 0.87);
-            border-color: #54B848;
+            background-color: transparent;
+            border: none;
+            padding: 6px 32px 6px 8px;
             outline: none;
         }
         
-        .mui-filter-input.active {
-            background-color: #ffc107;
-            color: rgba(0, 0, 0, 0.87);
-            border-color: #ff8f00;
+        .mui-filter-input::placeholder {
+            color: rgba(0, 0, 0, 0.6);
+            opacity: 1;
+        }
+        
+        .mui-filter-dropdown-icon {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            color: rgba(0, 0, 0, 0.54);
+            cursor: pointer;
+            transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms;
+        }
+        
+        .mui-filter-dropdown-icon.open {
+            transform: translateY(-50%) rotate(180deg);
+        }
+        
+        .mui-filter-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid rgba(0, 0, 0, 0.23);
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .mui-filter-option {
+            padding: 8px 12px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms;
+        }
+        
+        .mui-filter-option:hover {
+            background-color: rgba(0, 0, 0, 0.04);
+        }
+        
+        .mui-filter-option.selected {
+            background-color: rgba(25, 118, 210, 0.08);
+            color: #1976d2;
             font-weight: 500;
         }
         
-        .mui-filter-input.active::placeholder {
-            color: rgba(0, 0, 0, 0.6);
+        .mui-filter-checkbox {
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            accent-color: #1976d2;
+        }
+        
+        .mui-filter-regex-section {
+            border-top: 1px solid rgba(0, 0, 0, 0.12);
+            padding: 8px 12px;
+            background-color: #f8f9fa;
+        }
+        
+        .mui-filter-regex-input {
+            width: 100%;
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border: 1px solid rgba(0, 0, 0, 0.23);
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        
+        .mui-filter-regex-input:focus {
+            border-color: #1976d2;
+            outline: none;
         }
     </style>
 </head>
@@ -858,7 +897,7 @@
 
                                 <template x-if="referenceData.length > 0">
                                     <p class="text-sm text-gray-600 mt-4">
-                                        Showing <span x-text="referenceData.length"></span> configuration entries. Auto-refresh every 30 seconds.
+                                        Showing <span x-text="referenceData.length"></span> configuration entries. Updates after file uploads and rollbacks.
                                         <template x-if="refDataLastRefresh">
                                             <span> Last updated: <span x-text="refDataLastRefresh.toLocaleTimeString()"></span>.</span>
                                         </template>
@@ -1267,33 +1306,83 @@
                                 
                                 <div class="border border-gray-200 rounded-lg overflow-auto max-h-[500px] custom-scrollbar">
                                     <table class="w-full text-xs">
-                                        <thead class="bg-td-green text-white sticky top-0">
+                                        <thead class="bg-gray-100 text-gray-800 sticky top-0">
                                             <tr>
                                                 <template x-for="column in getVersionData().columns" :key="column">
-                                                    <th class="px-3 py-2 text-left font-medium border-r border-td-dark-green min-w-[160px] max-w-[250px]">
-                                                        <div class="flex flex-col gap-1">
-                                                            <div class="font-bold text-white text-xs" x-text="column"></div>
-                                                            <!-- Value Filter Dropdown -->
-                                                            <select 
-                                                                x-model="columnFilters[column]"
-                                                                @change="updateColumnFilter(column, $event.target.value)"
-                                                                class="mui-filter-select"
-                                                                :class="columnFilters[column] && columnFilters[column] !== '' ? 'active' : ''"
-                                                            >
-                                                                <option value="">All</option>
-                                                                <template x-for="value in getUniqueValuesForColumn(column)" :key="value">
-                                                                    <option :value="value" x-text="value === '' ? '(blank)' : value"></option>
-                                                                </template>
-                                                            </select>
-                                                            <!-- Regex Filter -->
-                                                            <input 
-                                                                type="text" 
-                                                                placeholder="regex filter..."
-                                                                x-model="regexFilters[column]"
-                                                                @input="updateRegexFilter(column, $event.target.value)"
-                                                                class="mui-filter-input"
-                                                                :class="regexFilters[column] && regexFilters[column] !== '' ? 'active' : ''"
-                                                            />
+                                                    <th class="px-3 py-2 text-left font-medium border-r border-gray-300 min-w-[160px] max-w-[250px]">
+                                                        <div class="flex flex-col gap-2">
+                                                            <div class="font-bold text-gray-800 text-xs" x-text="column"></div>
+                                                            <!-- Combined Filter Control -->
+                                                            <div class="mui-combined-filter">
+                                                                <div 
+                                                                    class="mui-filter-container"
+                                                                    :class="{ 
+                                                                        'active': isColumnFilterOpen[column], 
+                                                                        'has-values': hasActiveFilters(column) 
+                                                                    }"
+                                                                    @click.away="closeColumnFilter(column)"
+                                                                >
+                                                                    <input 
+                                                                        type="text" 
+                                                                        :placeholder="getFilterPlaceholder(column)"
+                                                                        x-model="regexFilters[column]"
+                                                                        @input="updateRegexFilter(column, $event.target.value)"
+                                                                        @focus="openColumnFilter(column)"
+                                                                        class="mui-filter-input"
+                                                                        readonly
+                                                                    />
+                                                                    <svg 
+                                                                        class="mui-filter-dropdown-icon"
+                                                                        :class="{ 'open': isColumnFilterOpen[column] }"
+                                                                        @click="toggleColumnFilter(column)"
+                                                                        viewBox="0 0 24 24"
+                                                                    >
+                                                                        <path d="M7 10l5 5 5-5z"/>
+                                                                    </svg>
+                                                                    
+                                                                    <!-- Dropdown Menu -->
+                                                                    <div 
+                                                                        x-show="isColumnFilterOpen[column]" 
+                                                                        x-transition
+                                                                        class="mui-filter-dropdown"
+                                                                    >
+                                                                        <!-- Regex Section -->
+                                                                        <div class="mui-filter-regex-section">
+                                                                            <input 
+                                                                                type="text" 
+                                                                                placeholder="Enter regex pattern..."
+                                                                                x-model="regexFilters[column]"
+                                                                                @input="updateRegexFilter(column, $event.target.value)"
+                                                                                @click.stop
+                                                                                class="mui-filter-regex-input"
+                                                                            />
+                                                                        </div>
+                                                                        
+                                                                        <!-- Value Options -->
+                                                                        <template x-for="value in getFilteredUniqueValues(column)" :key="value">
+                                                                            <div 
+                                                                                class="mui-filter-option"
+                                                                                :class="{ 'selected': isValueSelected(column, value) }"
+                                                                                @click="toggleValueSelection(column, value)"
+                                                                            >
+                                                                                <input 
+                                                                                    type="checkbox" 
+                                                                                    class="mui-filter-checkbox"
+                                                                                    :checked="isValueSelected(column, value)"
+                                                                                    @click.stop
+                                                                                />
+                                                                                <span x-text="value === '' ? '(blank)' : value"></span>
+                                                                            </div>
+                                                                        </template>
+                                                                        
+                                                                        <template x-if="getFilteredUniqueValues(column).length === 0">
+                                                                            <div class="mui-filter-option">
+                                                                                <span class="text-gray-500">No matching values</span>
+                                                                            </div>
+                                                                        </template>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     </th>
                                                 </template>
@@ -1342,7 +1431,7 @@
                 </template>
                 <button 
                     @click="selectedVersion = null; clearAllFilters()"
-                    class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                    class="mui-button-small mui-button-text-primary"
                 >
                     Close
                 </button>
@@ -1459,9 +1548,10 @@
                 confirmRollback: null,
                 actionMsg: '',
                 
-                // Filtering system for version dialog
-                columnFilters: {},
-                regexFilters: {},
+                // Enhanced filtering system for version dialog
+                columnFilters: {}, // column -> array of selected values
+                regexFilters: {}, // column -> regex pattern
+                isColumnFilterOpen: {}, // column -> boolean for dropdown state
                 
                 async init() {
                     await this.checkSystemHealth();
@@ -1469,7 +1559,7 @@
                         await this.loadConfiguration();
                     }
                     this.startLogPolling();
-                    this.startReferenceDataPolling();
+                    await this.loadReferenceDataConfig(); // Load only on page init
                     await this.loadBackups();
                 },
                 
@@ -1753,6 +1843,7 @@
                                     this.disabled = false;
                                     
                                     if (data.done && !data.error) {
+                                        // Refresh Reference Data after successful upload
                                         this.loadReferenceDataConfig();
                                     }
                                 }
@@ -1869,10 +1960,6 @@
                     setInterval(() => this.loadLogs(), 10000);
                 },
 
-                startReferenceDataPolling() {
-                    this.loadReferenceDataConfig();
-                    setInterval(() => this.loadReferenceDataConfig(), 30000); // Refresh every 30 seconds
-                },
                 
                 toggleLogExpansion(index) {
                     if (this.expandedLogRows.has(index)) {
@@ -2073,6 +2160,8 @@
                         
                         this.actionMsg = `Rollback success: main_rows=${data.main_rows} stage_rows=${data.stage_rows}`;
                         this.loadBackups();
+                        // Refresh Reference Data after successful rollback
+                        this.loadReferenceDataConfig();
                     } catch (error) {
                         this.actionMsg = `Rollback failed: ${error.message}`;
                     } finally {
@@ -2081,7 +2170,7 @@
                     }
                 },
 
-                // Filtering methods for version dialog
+                // Enhanced filtering methods for version dialog
                 getUniqueValuesForColumn(column) {
                     const data = this.getVersionData();
                     if (!data) return [];
@@ -2099,11 +2188,28 @@
                         if (!seen.has(valueStr)) {
                             seen.add(valueStr);
                             unique.push(valueStr);
-                            if (unique.length >= 50) break; // Limit to 50 unique values
+                            if (unique.length >= 100) break; // Increased limit
                         }
                     }
                     
                     return unique.sort((a, b) => a.localeCompare(b));
+                },
+
+                getFilteredUniqueValues(column) {
+                    const allValues = this.getUniqueValuesForColumn(column);
+                    const regexPattern = this.regexFilters[column];
+                    
+                    if (!regexPattern || regexPattern.trim() === '') {
+                        return allValues;
+                    }
+                    
+                    try {
+                        const regex = new RegExp(regexPattern, 'i');
+                        return allValues.filter(value => regex.test(value));
+                    } catch (e) {
+                        // Invalid regex, return all values
+                        return allValues;
+                    }
                 },
 
                 getFilteredRows() {
@@ -2115,7 +2221,7 @@
                             const cell = row[index];
                             const cellStr = (cell === null || cell === undefined) ? '' : String(cell);
                             
-                            // Check regex filter
+                            // Check regex filter first
                             const regexPattern = this.regexFilters[column];
                             if (regexPattern && regexPattern.trim() !== '') {
                                 try {
@@ -2126,12 +2232,10 @@
                                 }
                             }
                             
-                            // Check column value filter (only if no regex filter)
-                            if (!regexPattern || regexPattern.trim() === '') {
-                                const columnFilter = this.columnFilters[column];
-                                if (columnFilter && columnFilter !== '') {
-                                    if (cellStr !== columnFilter) return false;
-                                }
+                            // Check multiple selected values
+                            const selectedValues = this.columnFilters[column];
+                            if (selectedValues && selectedValues.length > 0) {
+                                if (!selectedValues.includes(cellStr)) return false;
                             }
                             
                             return true;
@@ -2139,25 +2243,80 @@
                     });
                 },
 
-                updateColumnFilter(column, value) {
-                    this.columnFilters[column] = value;
-                    // Clear regex filter when value filter is used
-                    if (value) {
+                // Dropdown management methods
+                toggleColumnFilter(column) {
+                    this.isColumnFilterOpen[column] = !this.isColumnFilterOpen[column];
+                },
+
+                openColumnFilter(column) {
+                    this.isColumnFilterOpen[column] = true;
+                },
+
+                closeColumnFilter(column) {
+                    this.isColumnFilterOpen[column] = false;
+                },
+
+                // Value selection methods
+                isValueSelected(column, value) {
+                    const selected = this.columnFilters[column];
+                    return selected && selected.includes(value);
+                },
+
+                toggleValueSelection(column, value) {
+                    if (!this.columnFilters[column]) {
+                        this.columnFilters[column] = [];
+                    }
+                    
+                    const selected = this.columnFilters[column];
+                    const index = selected.indexOf(value);
+                    
+                    if (index > -1) {
+                        selected.splice(index, 1);
+                    } else {
+                        selected.push(value);
+                    }
+                    
+                    // Clear regex when selecting values
+                    if (selected.length > 0) {
                         this.regexFilters[column] = '';
                     }
                 },
 
                 updateRegexFilter(column, value) {
                     this.regexFilters[column] = value;
-                    // Clear column filter when regex filter is used
-                    if (value) {
-                        this.columnFilters[column] = '';
+                    // Clear selected values when using regex
+                    if (value && value.trim() !== '') {
+                        this.columnFilters[column] = [];
                     }
+                },
+
+                hasActiveFilters(column) {
+                    const regex = this.regexFilters[column];
+                    const values = this.columnFilters[column];
+                    return (regex && regex.trim() !== '') || (values && values.length > 0);
+                },
+
+                getFilterPlaceholder(column) {
+                    const values = this.columnFilters[column];
+                    const regex = this.regexFilters[column];
+                    
+                    if (regex && regex.trim() !== '') {
+                        return `RegEx: ${regex}`;
+                    } else if (values && values.length > 0) {
+                        if (values.length === 1) {
+                            return values[0] === '' ? '(blank)' : values[0];
+                        } else {
+                            return `${values.length} values selected`;
+                        }
+                    }
+                    
+                    return 'Filter column...';
                 },
 
                 clearAllFilters() {
                     this.columnFilters = {};
                     this.regexFilters = {};
+                    this.isColumnFilterOpen = {};
                 }
             }
         }
