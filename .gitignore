@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pytest_cache/
+
+# Virtual environments
+venv/
+.env
+.env.*
+
+# Node / frontend
+frontend/node_modules/
+**/node_modules/
+.npm-cache/
+
+# Logs
+*.log
+backend/logs/
+
+# OS / Editor
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Local data directories
+/data/reference_data/archive/
+/data/reference_data/format/
+/data/reference_data/temp/
+C:\\data\\reference_data\\archive/
+C:\\data\\reference_data\\format/
+C:\\data\\reference_data\\temp/
+archive/
+format/
+temp/
+
+
+# CSV test outputs
+*.csv
+
+# Format definition files (ignore all, keep placeholder/example if needed)
+*.fmt
+/backend/C:\\data\\reference_data\\format
+/backend/C:\data\reference_data\format
+
+# TLS Certificates (do not commit private keys)
+frontend/certs/
+*.key
+*.crt
+*.pem
