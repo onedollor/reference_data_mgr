@@ -137,32 +137,30 @@
             <div class="p-6">
                 <h2 class="text-lg font-semibold text-gray-800 mb-4">System Status</h2>
                 
-                <div class="flex items-center">
-                    <template x-if="systemStatus === 'loading'">
-                        <div class="flex items-center">
-                            <span class="material-icons text-td-green animate-spin mr-3">sync</span>
-                            <span class="text-sm text-gray-600">Checking system status...</span>
-                        </div>
-                    </template>
-                    
-                    <template x-if="systemStatus === 'healthy'">
-                        <div class="bg-td-green text-white px-4 py-2 rounded-lg flex items-center">
-                            <span class="material-icons mr-2">check_circle</span>
-                            <span class="font-medium">System is healthy and ready to process files</span>
-                        </div>
-                    </template>
-                    
-                    <template x-if="systemStatus === 'error'">
-                        <div class="bg-red-500 text-white px-4 py-2 rounded-lg flex items-center">
-                            <span class="material-icons mr-2">error</span>
-                            <span class="font-medium">System is not responding. Please check the backend service.</span>
-                        </div>
-                    </template>
-                </div>
+                <template x-if="systemStatus === 'loading'">
+                    <div class="flex items-center mb-4">
+                        <span class="material-icons text-td-green animate-spin mr-3 text-xl">sync</span>
+                        <span class="text-sm text-gray-600">Checking system status...</span>
+                    </div>
+                </template>
+                
+                <template x-if="systemStatus === 'healthy'">
+                    <div class="bg-td-green text-white px-4 py-3 rounded-lg flex items-center mb-4">
+                        <span class="material-icons mr-2">check_circle</span>
+                        <span class="font-medium">System is healthy and ready to process files</span>
+                    </div>
+                </template>
+                
+                <template x-if="systemStatus === 'error'">
+                    <div class="bg-red-500 text-white px-4 py-3 rounded-lg flex items-center mb-4">
+                        <span class="material-icons mr-2">error</span>
+                        <span class="font-medium">System is not responding. Please check the backend service.</span>
+                    </div>
+                </template>
 
-                <!-- Configuration Panel -->
+                <!-- System Configuration - Inside System Status Card -->
                 <template x-if="systemStatus === 'healthy' && config">
-                    <div class="mt-6">
+                    <div class="mt-4">
                         <div class="flex justify-between items-center mb-4">
                             <h3 class="text-lg font-semibold">System Configuration</h3>
                             <button 
@@ -1161,6 +1159,8 @@
 
     <script>
         function app() {
+            const API_BASE_URL = 'http://localhost:8000';
+            
             return {
                 // System state
                 systemStatus: 'loading',
@@ -1231,13 +1231,15 @@
                 
                 async init() {
                     await this.checkSystemHealth();
-                    await this.loadConfiguration();
+                    if (this.systemStatus === 'healthy') {
+                        await this.loadConfiguration();
+                    }
                     this.startLogPolling();
                 },
                 
                 async checkSystemHealth() {
                     try {
-                        const response = await fetch('/');
+                        const response = await fetch(`${API_BASE_URL}/`);
                         if (response.ok) {
                             this.systemStatus = 'healthy';
                         } else {
@@ -1249,10 +1251,8 @@
                 },
                 
                 async loadConfiguration() {
-                    if (this.systemStatus !== 'healthy') return;
-                    
                     try {
-                        const response = await fetch('/config');
+                        const response = await fetch(`${API_BASE_URL}/config`);
                         if (response.ok) {
                             const configData = await response.json();
                             this.config = configData;
@@ -1325,7 +1325,7 @@
                         const formData = new FormData();
                         formData.append('file', this.selectedFile);
                         
-                        const response = await fetch('/detect-format', {
+                        const response = await fetch(`${API_BASE_URL}/detect-format`, {
                             method: 'POST',
                             body: formData
                         });
@@ -1383,7 +1383,7 @@
                         formData.append('filename', this.selectedFile.name);
                         formData.append('load_mode', this.formatConfig.load_mode);
                         
-                        const response = await fetch('/verify-load-type', {
+                        const response = await fetch(`${API_BASE_URL}/verify-load-type`, {
                             method: 'POST',
                             body: formData
                         });
@@ -1416,7 +1416,7 @@
                         formData.append('override_load_type', overrideLoadType);
                     }
                     
-                    const response = await fetch('/upload', {
+                    const response = await fetch(`${API_BASE_URL}/upload`, {
                         method: 'POST',
                         body: formData
                     });
@@ -1505,7 +1505,7 @@
                     
                     this.progressInterval = setInterval(async () => {
                         try {
-                            const response = await fetch(`/progress/${this.progressKey}`);
+                            const response = await fetch(`${API_BASE_URL}/progress/${this.progressKey}`);
                             if (!response.ok) return;
                             
                             const data = await response.json();
@@ -1545,7 +1545,7 @@
                     };
                     
                     try {
-                        await fetch(`/progress/${this.progressKey}/cancel`, {
+                        await fetch(`${API_BASE_URL}/progress/${this.progressKey}/cancel`, {
                             method: 'POST'
                         });
                     } catch (error) {
@@ -1581,7 +1581,7 @@
                     this.refDataError = null;
                     
                     try {
-                        const response = await fetch('/reference-data-config');
+                        const response = await fetch(`${API_BASE_URL}/reference-data-config`);
                         if (!response.ok) {
                             throw new Error(`Failed to load Reference Data Config: ${response.status}`);
                         }
@@ -1602,7 +1602,7 @@
                     
                     try {
                         const ts = Date.now();
-                        const response = await fetch(`/logs?ts=${ts}`, {
+                        const response = await fetch(`${API_BASE_URL}/logs?ts=${ts}`, {
                             cache: 'no-store',
                             headers: {
                                 'Cache-Control': 'no-cache',
@@ -1678,7 +1678,7 @@
                     this.backupsError = '';
                     
                     try {
-                        const response = await fetch('/backups');
+                        const response = await fetch(`${API_BASE_URL}/backups`);
                         if (!response.ok) throw new Error('Failed to load backups');
                         const data = await response.json();
                         this.backups = data.backups || [];
@@ -1706,7 +1706,7 @@
                     const key = `${baseName}|${versionId}`;
                     
                     try {
-                        const response = await fetch(`/backups/${baseName}/versions/${versionId}?limit=${limit}`);
+                        const response = await fetch(`${API_BASE_URL}/backups/${baseName}/versions/${versionId}?limit=${limit}`);
                         if (!response.ok) throw new Error('Failed to load version rows');
                         const data = await response.json();
                         this.versionRows[key] = { ...data, fetchedLimit: limit };
@@ -1723,7 +1723,7 @@
                 
                 async exportBackupMain(baseName) {
                     try {
-                        const response = await fetch(`/backups/${baseName}/export-main`, {
+                        const response = await fetch(`${API_BASE_URL}/backups/${baseName}/export-main`, {
                             headers: { 'Accept': 'text/csv' }
                         });
                         
@@ -1766,7 +1766,7 @@
                     if (!this.selectedVersion) return;
                     
                     try {
-                        const response = await fetch(`/backups/${this.selectedVersion.base_name}/versions/${this.selectedVersion.version_id}/export`, {
+                        const response = await fetch(`${API_BASE_URL}/backups/${this.selectedVersion.base_name}/versions/${this.selectedVersion.version_id}/export`, {
                             headers: { 'Accept': 'text/csv' }
                         });
                         
@@ -1809,7 +1809,7 @@
                     this.actionMsg = '';
                     
                     try {
-                        const response = await fetch(`/backups/${base_name}/rollback/${version_id}`, {
+                        const response = await fetch(`${API_BASE_URL}/backups/${base_name}/rollback/${version_id}`, {
                             method: 'POST'
                         });
                         const data = await response.json();
