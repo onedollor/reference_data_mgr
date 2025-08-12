@@ -432,7 +432,7 @@ class DataIngester:
                 yield f"Reference_Data_Cfg record processed and post-load procedure called for table {table_name}"
                 await self.logger.log_info(
                     "reference_data_cfg",
-                    f"Reference_Data_Cfg record processed and ref.usp_reference_data_postLoad called for table {table_name}"
+                    f"Reference_Data_Cfg record processed and ref.{self.db_manager.postload_sp_name} called for table {table_name}"
                 )
             except Exception as cfg_error:
                 # Log warning but don't fail the entire ingestion

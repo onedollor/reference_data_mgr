@@ -36,6 +36,9 @@ class DatabaseManager:
             raise ValueError("Database username (db_user) environment variable is required")
         if not self.password:
             raise ValueError("Database password (db_password) environment variable is required")
+        
+        # Dynamic stored procedure name based on database name
+        self.postload_sp_name = f"usp_reference_data_{self.database}"
 
         # Simple connection pool
         try:
@@ -633,10 +636,10 @@ class DatabaseManager:
         """Ensure Reference_Data_Cfg table exists in StaffDatabase.dbo schema"""
         cursor = connection.cursor()
         
-        # Check if table exists in dbo schema
+        # Check if table exists in StaffDatabase.dbo schema
         table_exists_sql = """
             SELECT COUNT(*) 
-            FROM INFORMATION_SCHEMA.TABLES 
+            FROM [StaffDatabase].INFORMATION_SCHEMA.TABLES 
             WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Reference_Data_Cfg'
         """
         cursor.execute(table_exists_sql)
@@ -645,7 +648,7 @@ class DatabaseManager:
         if not exists:
             # Create the Reference_Data_Cfg table
             create_table_sql = """
-                CREATE TABLE [dbo].[Reference_Data_Cfg](
+                CREATE TABLE [StaffDatabase].[dbo].[Reference_Data_Cfg](
                     [sp_name] [varchar](255) NOT NULL,
                     [ref_name] [varchar](255) NOT NULL,
                     [source_db] [varchar](4000) NULL,
@@ -658,7 +661,7 @@ class DatabaseManager:
             
             # Add primary key constraint
             add_pk_sql = """
-                ALTER TABLE [dbo].[Reference_Data_Cfg] 
+                ALTER TABLE [StaffDatabase].[dbo].[Reference_Data_Cfg] 
                 ADD CONSTRAINT [pk_ref_data_cfg] PRIMARY KEY CLUSTERED 
                 ([ref_name] ASC)
                 WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, 
@@ -671,39 +674,39 @@ class DatabaseManager:
             print("Created Reference_Data_Cfg table in dbo schema")
     
     def ensure_postload_stored_procedure(self, connection: pyodbc.Connection) -> None:
-        """Ensure ref.usp_reference_data_postLoad stored procedure exists"""
+        """Ensure ref.usp_reference_data_{database_name} stored procedure exists"""
         cursor = connection.cursor()
         
         try:
             # Check if stored procedure exists in ref schema
-            check_sp_sql = """
+            check_sp_sql = f"""
                 SELECT COUNT(*) 
                 FROM INFORMATION_SCHEMA.ROUTINES 
-                WHERE ROUTINE_SCHEMA = 'ref' AND ROUTINE_NAME = 'usp_reference_data_postLoad' AND ROUTINE_TYPE = 'PROCEDURE'
+                WHERE ROUTINE_SCHEMA = 'ref' AND ROUTINE_NAME = '{self.postload_sp_name}' AND ROUTINE_TYPE = 'PROCEDURE'
             """
             cursor.execute(check_sp_sql)
             exists = cursor.fetchone()[0] > 0
             
             if not exists:
                 # Create empty stored procedure
-                create_sp_sql = """
-                    CREATE PROCEDURE [ref].[usp_reference_data_postLoad]
+                create_sp_sql = f"""
+                    CREATE PROCEDURE [ref].[{self.postload_sp_name}]
                     AS
                     BEGIN
                         -- Empty post-load procedure - customize as needed
                         -- This procedure is called after each successful reference data ingestion
-                        PRINT 'Post-load procedure executed - no custom logic defined'
+                        PRINT 'Post-load procedure executed for {self.database} - no custom logic defined'
                     END
                 """
                 cursor.execute(create_sp_sql)
                 connection.commit()
-                print("Created empty ref.usp_reference_data_postLoad stored procedure")
+                print(f"Created empty ref.{self.postload_sp_name} stored procedure")
             else:
-                print("ref.usp_reference_data_postLoad stored procedure already exists")
+                print(f"ref.{self.postload_sp_name} stored procedure already exists")
                 
         except Exception as e:
             connection.rollback()
-            error_msg = f"Failed to create ref.usp_reference_data_postLoad stored procedure: {str(e)}"
+            error_msg = f"Failed to create ref.{self.postload_sp_name} stored procedure: {str(e)}"
             print(f"WARNING: {error_msg}")
             # Don't raise - this shouldn't fail the entire startup
     
@@ -949,7 +952,7 @@ class DatabaseManager:
             # Check if record already exists and compare all columns
             check_sql = """
                 SELECT [sp_name], [source_db], [source_schema], [source_table], [is_enabled]
-                FROM [dbo].[Reference_Data_Cfg] 
+                FROM [StaffDatabase].[dbo].[Reference_Data_Cfg] 
                 WHERE [ref_name] = ?
             """
             cursor.execute(check_sql, ref_name)
@@ -958,7 +961,7 @@ class DatabaseManager:
             if existing_record is None:
                 # Insert new record if it doesn't exist
                 insert_sql = """
-                    INSERT INTO [dbo].[Reference_Data_Cfg] 
+                    INSERT INTO [StaffDatabase].[dbo].[Reference_Data_Cfg] 
                     ([sp_name], [ref_name], [source_db], [source_schema], [source_table], [is_enabled])
                     VALUES (?, ?, ?, ?, ?, ?)
                 """
@@ -984,7 +987,7 @@ class DatabaseManager:
                 if needs_update:
                     # Update existing record with new values
                     update_sql = """
-                        UPDATE [dbo].[Reference_Data_Cfg] 
+                        UPDATE [StaffDatabase].[dbo].[Reference_Data_Cfg] 
                         SET [sp_name] = ?, [source_db] = ?, [source_schema] = ?, 
                             [source_table] = ?, [is_enabled] = ?
                         WHERE [ref_name] = ?
@@ -999,12 +1002,12 @@ class DatabaseManager:
             # Call post-load stored procedure
             try:
                 postload_cursor = connection.cursor()
-                postload_cursor.execute("EXEC [ref].[usp_reference_data_postLoad]")
+                postload_cursor.execute(f"EXEC [ref].[{self.postload_sp_name}]")
                 connection.commit()
-                print(f"Called ref.usp_reference_data_postLoad stored procedure")
+                print(f"Called ref.{self.postload_sp_name} stored procedure")
             except Exception as sp_error:
                 # Log warning but don't fail the entire process
-                print(f"WARNING: Failed to call ref.usp_reference_data_postLoad: {str(sp_error)}")
+                print(f"WARNING: Failed to call ref.{self.postload_sp_name}: {str(sp_error)}")
                 # Don't rollback the Reference_Data_Cfg changes if SP fails
             
         except Exception as e:
