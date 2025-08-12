@@ -6,7 +6,8 @@
       "Bash(curl:*)",
       "Bash(grep:*)",
       "Bash(rm:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": []
   }
