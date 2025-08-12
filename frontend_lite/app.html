@@ -740,74 +740,76 @@
                         <template x-if="logs.length > 0">
                             <div class="border border-gray-200 rounded-lg overflow-hidden">
                                 <table class="w-full text-sm">
-                                    <thead class="bg-gray-50">
-                                        <tr>
-                                            <th class="w-8 px-2 py-2"></th>
-                                            <th class="px-4 py-2 text-left">Timestamp</th>
-                                            <th class="px-4 py-2 text-left">Level</th>
-                                            <th class="px-4 py-2 text-left">Action</th>
-                                            <th class="px-4 py-2 text-left">Message</th>
-                                        </tr>
-                                    </thead>
                                     <tbody class="max-h-96 overflow-y-auto">
+                                        <tbody>
+                                            <thead class="bg-gray-50">
+                                                <tr>
+                                                    <th class="w-8 px-2 py-2"></th>
+                                                    <th class="px-4 py-2 text-left">Timestamp</th>
+                                                    <th class="px-4 py-2 text-left">Level</th>
+                                                    <th class="px-4 py-2 text-left">Action</th>
+                                                    <th class="px-4 py-2 text-left">Message</th>
+                                                </tr>
+                                            </thead>
+                                        </tbody>
                                         <template x-for="(log, idx) in getDisplayLogs()" :key="idx">
-                                            <tr class="border-t border-gray-200 hover:bg-gray-50">
-                                                <td class="px-2 py-2">
-                                                    <button 
-                                                        @click="toggleLogExpansion(idx)"
-                                                        class="p-1 hover:bg-gray-200 rounded"
-                                                    >
-                                                        <span class="material-icons text-sm" x-text="expandedLogRows.has(idx) ? 'expand_less' : 'expand_more'"></span>
-                                                    </button>
-                                                </td>
-                                                <td class="px-4 py-2 font-mono text-xs">
-                                                    <div x-text="formatTimestamp(log.timestamp_local)"></div>
-                                                    <div class="text-gray-500" x-text="'UTC: ' + formatTimestamp(log.timestamp)"></div>
-                                                </td>
-                                                <td class="px-4 py-2">
-                                                    <span 
-                                                        class="inline-block px-2 py-1 rounded text-xs border"
-                                                        :class="getLogLevelClass(log.level)"
-                                                        x-text="log.level"
-                                                    ></span>
-                                                </td>
-                                                <td class="px-4 py-2" x-text="log.action_step"></td>
-                                                <td class="px-4 py-2" :class="log.level === 'ERROR' ? 'text-red-700 font-semibold' : ''" x-text="formatLogMessage(log.message)"></td>
-                                            </tr>
-                                        </template>
-                                        <template x-for="(log, idx) in getDisplayLogs()" :key="'expanded-' + idx">
-                                            <tr x-show="expandedLogRows.has(idx)" x-transition>
-                                                <td colspan="5" class="px-0 py-0">
-                                                    <div class="p-4 bg-gray-50 border-t border-gray-200">
-                                                        <div class="mb-3">
-                                                            <h4 class="text-sm font-medium mb-2">Full Message:</h4>
-                                                            <div class="bg-white p-3 border border-gray-300 rounded font-mono text-xs whitespace-pre-wrap break-words" x-text="log.message"></div>
-                                                        </div>
-                                                        
-                                                        <template x-if="log.traceback">
+                                            <tbody>
+                                                <tr class="border-t border-gray-200 hover:bg-gray-50">
+                                                    <td class="px-2 py-2">
+                                                        <button 
+                                                            @click="toggleLogExpansion(idx)"
+                                                            class="p-1 hover:bg-gray-200 rounded"
+                                                        >
+                                                            <span class="material-icons text-sm" x-text="expandedLogRows.has(idx) ? 'expand_less' : 'expand_more'"></span>
+                                                        </button>
+                                                    </td>
+                                                    <td class="px-4 py-2 font-mono text-xs">
+                                                        <div x-text="formatTimestamp(log.timestamp_local)"></div>
+                                                        <div class="text-gray-500" x-text="'UTC: ' + formatTimestamp(log.timestamp)"></div>
+                                                    </td>
+                                                    <td class="px-4 py-2">
+                                                        <span 
+                                                            class="inline-block px-2 py-1 rounded text-xs border"
+                                                            :class="getLogLevelClass(log.level)"
+                                                            x-text="log.level"
+                                                        ></span>
+                                                    </td>
+                                                    <td class="px-4 py-2" x-text="log.action_step"></td>
+                                                    <td class="px-4 py-2" :class="log.level === 'ERROR' ? 'text-red-700 font-semibold' : ''" x-text="formatLogMessage(log.message)"></td>
+                                                </tr>
+                                                <tr x-show="expandedLogRows.has(idx)" x-transition>
+                                                    <td colspan="5" class="px-0 py-0">
+                                                        <div class="p-4 bg-gray-50 border-t border-gray-200">
                                                             <div class="mb-3">
-                                                                <h4 class="text-sm font-medium text-red-700 mb-2">Traceback:</h4>
-                                                                <div class="bg-red-50 p-3 border border-red-300 rounded font-mono text-xs text-red-700 whitespace-pre-wrap break-words" x-text="log.traceback"></div>
+                                                                <h4 class="text-sm font-medium mb-2">Full Message:</h4>
+                                                                <div class="bg-white p-3 border border-gray-300 rounded font-mono text-xs whitespace-pre-wrap break-words" x-text="log.message"></div>
                                                             </div>
-                                                        </template>
-                                                        
-                                                        <template x-if="log.metadata && Object.keys(log.metadata).length > 0">
-                                                            <div>
-                                                                <h4 class="text-sm font-medium mb-2">Additional Information:</h4>
-                                                                <div class="bg-white p-3 border border-gray-300 rounded">
-                                                                    <template x-for="[key, value] in Object.entries(log.metadata)" :key="key">
-                                                                        <template x-if="value">
-                                                                            <div class="text-sm mb-1">
-                                                                                <strong x-text="key + ':'"></strong> <span x-text="String(value)"></span>
-                                                                            </div>
-                                                                        </template>
-                                                                    </template>
+                                                            
+                                                            <template x-if="log.traceback">
+                                                                <div class="mb-3">
+                                                                    <h4 class="text-sm font-medium text-red-700 mb-2">Traceback:</h4>
+                                                                    <div class="bg-red-50 p-3 border border-red-300 rounded font-mono text-xs text-red-700 whitespace-pre-wrap break-words" x-text="log.traceback"></div>
                                                                 </div>
-                                                            </div>
-                                                        </template>
-                                                    </div>
-                                                </td>
-                                            </tr>
+                                                            </template>
+                                                            
+                                                            <template x-if="log.metadata && Object.keys(log.metadata).length > 0">
+                                                                <div>
+                                                                    <h4 class="text-sm font-medium mb-2">Additional Information:</h4>
+                                                                    <div class="bg-white p-3 border border-gray-300 rounded">
+                                                                        <template x-for="[key, value] in Object.entries(log.metadata)" :key="key">
+                                                                            <template x-if="value">
+                                                                                <div class="text-sm mb-1">
+                                                                                    <strong x-text="key + ':'"></strong> <span x-text="String(value)"></span>
+                                                                                </div>
+                                                                            </template>
+                                                                        </template>
+                                                                    </div>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
                                         </template>
                                     </tbody>
                                 </table>
