@@ -17,7 +17,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 import json
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 import uvicorn
@@ -48,11 +48,11 @@ async def startup_event():
         db_manager.ensure_reference_data_cfg_table(connection)
         db_manager.ensure_postload_stored_procedure(connection)
         connection.close()
-        await logger.log_info("startup", "Application started successfully - Reference_Data_Cfg table and post-load procedure verified")
+        await logger.log_info("startup", "Application started successfully - Reference_Data_Cfg table and post-load procedure verified", source_ip="system")
     except Exception as e:
         error_msg = f"Startup failed: {str(e)}"
         print(f"ERROR: {error_msg}")
-        await logger.log_error("startup", error_msg, traceback.format_exc())
+        await logger.log_error("startup", error_msg, traceback.format_exc(), source_ip="system")
         # Continue startup - don't fail the entire application
         pass
 
@@ -70,6 +70,25 @@ db_manager = DatabaseManager()
 file_handler = FileHandler()
 logger = DatabaseLogger(db_manager)
 
+def get_client_ip(request: Request) -> str:
+    """Extract client IP address from request"""
+    # Check for X-Forwarded-For header (proxy/load balancer)
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        # Take the first IP in the chain
+        return forwarded_for.split(",")[0].strip()
+    
+    # Check for X-Real-IP header (nginx)
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+    
+    # Fallback to direct client IP
+    if hasattr(request, "client") and request.client:
+        return request.client.host
+    
+    return "unknown"
+
 # Ensure schemas on startup
 @app.on_event("startup")
 async def startup_init():
@@ -80,7 +99,7 @@ async def startup_init():
     except Exception as e:
         # Log but don't crash app
         try:
-            await logger.log_error("startup", f"Schema init failed: {e}")
+            await logger.log_error("startup", f"Schema init failed: {e}", source_ip="system")
         except Exception:
             print(f"Startup schema init failed: {e}")
 
@@ -94,7 +113,7 @@ async def root():
     }
 
 @app.get("/health/database")
-async def database_health():
+async def database_health(request: Request):
     """Check database connection health"""
     try:
         # Test database connection
@@ -115,7 +134,7 @@ async def database_health():
     except Exception as e:
         error_msg = f"Database connection failed: {str(e)}"
         try:
-            await logger.log_error("database_health", error_msg)
+            await logger.log_error("database_health", error_msg, source_ip=get_client_ip(request))
         except Exception:
             pass  # Don't fail if logging fails
         return {"status": "error", "message": error_msg}
@@ -408,6 +427,7 @@ async def detect_csv_format(file: UploadFile = File(...)):
 
 @app.post("/upload")
 async def upload_file(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     header_delimiter: str = Form("|"),
@@ -464,7 +484,7 @@ async def upload_file(
     except HTTPException:
         raise
     except Exception as e:
-        await logger.log_error("upload_file", str(e), traceback.format_exc())
+        await logger.log_error("upload_file", str(e), traceback.format_exc(), source_ip=get_client_ip(request))
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @app.post("/ingest/{filename}")
@@ -621,7 +641,7 @@ async def ingest_data_stream(
         yield f"data: {error_msg}\n\n"
 
 @app.get("/logs")
-async def get_logs(limit: int = 100):
+async def get_logs(request: Request, limit: int = 100):
     """Get recent log entries (no-cache)."""
     try:
         logs = await logger.get_logs(limit)
@@ -634,8 +654,41 @@ async def get_logs(limit: int = 100):
             }
         )
     except Exception as e:
-        await logger.log_error("get_logs", str(e), traceback.format_exc())
+        await logger.log_error("get_logs", str(e), traceback.format_exc(), source_ip=get_client_ip(request))
         raise HTTPException(status_code=500, detail=f"Failed to retrieve logs: {str(e)}")
+
+@app.get("/logs/{log_type}")
+async def get_logs_by_type(request: Request, log_type: str, limit: int = 100):
+    """Get recent log entries by type (system, error, ingest) (no-cache)."""
+    try:
+        if log_type not in ["system", "error", "ingest"]:
+            raise HTTPException(status_code=400, detail="Invalid log type. Must be one of: system, error, ingest")
+        
+        logs = await logger.get_logs_by_type(log_type, limit)
+        return JSONResponse(
+            content={"logs": logs, "log_type": log_type},
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache", 
+                "Expires": "0"
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        await logger.log_error("get_logs_by_type", str(e), traceback.format_exc(), source_ip=get_client_ip(request))
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve {log_type} logs: {str(e)}")
+
+@app.post("/logs/rotate")
+async def rotate_logs(request: Request, max_size_mb: int = 10):
+    """Rotate log files if they exceed max_size_mb."""
+    try:
+        logger.rotate_logs(max_size_mb)
+        await logger.log_info("rotate_logs", f"Log rotation completed with max size: {max_size_mb}MB", source_ip=get_client_ip(request))
+        return {"message": "Log rotation completed", "max_size_mb": max_size_mb}
+    except Exception as e:
+        await logger.log_error("rotate_logs", str(e), traceback.format_exc(), source_ip=get_client_ip(request))
+        raise HTTPException(status_code=500, detail=f"Failed to rotate logs: {str(e)}")
 
 @app.get("/progress/{key}")
 async def get_progress(key: str):
@@ -725,9 +778,9 @@ async def get_reference_data_config():
         cursor = connection.cursor()
         
         # Query all records from Reference_Data_Cfg table
-        query = """
+        query = f"""
             SELECT [sp_name], [ref_name], [source_db], [source_schema], [source_table], [is_enabled]
-            FROM [dbo].[Reference_Data_Cfg]
+            FROM [{db_manager.staff_database}].[dbo].[Reference_Data_Cfg]
             ORDER BY [ref_name]
         """
         cursor.execute(query)

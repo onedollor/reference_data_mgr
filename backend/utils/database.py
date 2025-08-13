@@ -28,6 +28,7 @@ class DatabaseManager:
         # Store connection parameters for SQLAlchemy
         self.server = os.getenv("db_host", "localhost")
         self.database = os.getenv("db_name", "test")
+        self.staff_database = os.getenv("staff_database", "StaffDatabase")
         self.username = os.getenv("db_user")
         self.password = os.getenv("db_password")
         
@@ -633,13 +634,13 @@ class DatabaseManager:
 
     
     def ensure_reference_data_cfg_table(self, connection: pyodbc.Connection) -> None:
-        """Ensure Reference_Data_Cfg table exists in StaffDatabase.dbo schema"""
+        """Ensure Reference_Data_Cfg table exists in staff database dbo schema (configurable via staff_database env var)"""
         cursor = connection.cursor()
         
-        # Check if table exists in StaffDatabase.dbo schema
-        table_exists_sql = """
+        # Check if table exists in staff database dbo schema
+        table_exists_sql = f"""
             SELECT COUNT(*) 
-            FROM [StaffDatabase].INFORMATION_SCHEMA.TABLES 
+            FROM [{self.staff_database}].INFORMATION_SCHEMA.TABLES 
             WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Reference_Data_Cfg'
         """
         cursor.execute(table_exists_sql)
@@ -647,8 +648,8 @@ class DatabaseManager:
         
         if not exists:
             # Create the Reference_Data_Cfg table
-            create_table_sql = """
-                CREATE TABLE [StaffDatabase].[dbo].[Reference_Data_Cfg](
+            create_table_sql = f"""
+                CREATE TABLE [{self.staff_database}].[dbo].[Reference_Data_Cfg](
                     [sp_name] [varchar](255) NOT NULL,
                     [ref_name] [varchar](255) NOT NULL,
                     [source_db] [varchar](4000) NULL,
@@ -660,8 +661,8 @@ class DatabaseManager:
             cursor.execute(create_table_sql)
             
             # Add primary key constraint
-            add_pk_sql = """
-                ALTER TABLE [StaffDatabase].[dbo].[Reference_Data_Cfg] 
+            add_pk_sql = f"""
+                ALTER TABLE [{self.staff_database}].[dbo].[Reference_Data_Cfg] 
                 ADD CONSTRAINT [pk_ref_data_cfg] PRIMARY KEY CLUSTERED 
                 ([ref_name] ASC)
                 WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, 
@@ -950,9 +951,9 @@ class DatabaseManager:
             is_enabled = 1
             
             # Check if record already exists and compare all columns
-            check_sql = """
+            check_sql = f"""
                 SELECT [sp_name], [source_db], [source_schema], [source_table], [is_enabled]
-                FROM [StaffDatabase].[dbo].[Reference_Data_Cfg] 
+                FROM [{self.staff_database}].[dbo].[Reference_Data_Cfg] 
                 WHERE [ref_name] = ?
             """
             cursor.execute(check_sql, ref_name)
@@ -960,8 +961,8 @@ class DatabaseManager:
             
             if existing_record is None:
                 # Insert new record if it doesn't exist
-                insert_sql = """
-                    INSERT INTO [StaffDatabase].[dbo].[Reference_Data_Cfg] 
+                insert_sql = f"""
+                    INSERT INTO [{self.staff_database}].[dbo].[Reference_Data_Cfg] 
                     ([sp_name], [ref_name], [source_db], [source_schema], [source_table], [is_enabled])
                     VALUES (?, ?, ?, ?, ?, ?)
                 """
@@ -986,8 +987,8 @@ class DatabaseManager:
                 
                 if needs_update:
                     # Update existing record with new values
-                    update_sql = """
-                        UPDATE [StaffDatabase].[dbo].[Reference_Data_Cfg] 
+                    update_sql = f"""
+                        UPDATE [{self.staff_database}].[dbo].[Reference_Data_Cfg] 
                         SET [sp_name] = ?, [source_db] = ?, [source_schema] = ?, 
                             [source_table] = ?, [is_enabled] = ?
                         WHERE [ref_name] = ?
