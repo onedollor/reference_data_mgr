@@ -567,90 +567,6 @@
                             </template>
                         </div>
 
-                        <!-- Table Selection Section -->
-                        <template x-if="selectedFile">
-                            <div class="mb-6">
-                                <h3 class="text-sm font-medium text-gray-700 mb-3">Table Selection</h3>
-                                
-                                <!-- Table Option Selection -->
-                                <div class="mb-4">
-                                    <div class="flex items-center space-x-4 mb-3">
-                                        <label class="flex items-center">
-                                            <input 
-                                                type="radio" 
-                                                x-model="tableOption" 
-                                                value="existing" 
-                                                class="mr-2 text-td-green focus:ring-td-green"
-                                            />
-                                            <span class="text-sm font-medium text-gray-700">Use Existing Table</span>
-                                        </label>
-                                        <label class="flex items-center">
-                                            <input 
-                                                type="radio" 
-                                                x-model="tableOption" 
-                                                value="new" 
-                                                class="mr-2 text-td-green focus:ring-td-green"
-                                            />
-                                            <span class="text-sm font-medium text-gray-700">Create New Table</span>
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <!-- Existing Table Selection -->
-                                <template x-if="tableOption === 'existing'">
-                                    <div class="mb-4">
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Select Existing Table</label>
-                                        <select 
-                                            x-model="selectedTable"
-                                            class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-td-green focus:border-transparent"
-                                            :disabled="disabled"
-                                        >
-                                            <option value="">Choose a table...</option>
-                                            <template x-for="table in availableTables">
-                                                <option :value="table" x-text="table"></option>
-                                            </template>
-                                        </select>
-                                    </div>
-                                </template>
-
-                                <!-- New Table Creation -->
-                                <template x-if="tableOption === 'new'">
-                                    <div class="mb-4">
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">New Table Name</label>
-                                        <input 
-                                            type="text" 
-                                            x-model="newTableName"
-                                            :placeholder="suggestedTableName"
-                                            class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-td-green focus:border-transparent"
-                                            :disabled="disabled"
-                                        />
-                                        <template x-if="suggestedTableName">
-                                            <div class="mt-2 text-sm text-gray-600">
-                                                Suggested name: <span class="font-medium" x-text="suggestedTableName"></span>
-                                                <button 
-                                                    @click="newTableName = suggestedTableName"
-                                                    class="ml-2 text-td-green hover:text-td-dark-green font-medium"
-                                                >
-                                                    Use suggested
-                                                </button>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </template>
-
-                                <!-- Table Info Display -->
-                                <template x-if="(tableOption === 'existing' && selectedTable) || (tableOption === 'new' && newTableName)">
-                                    <div class="p-3 bg-gray-50 rounded-lg text-sm">
-                                        <span class="font-medium">Target Table:</span>
-                                        <span x-text="tableOption === 'existing' ? selectedTable : newTableName"></span>
-                                        <template x-if="tableOption === 'new'">
-                                            <span class="text-gray-600"> (will be created)</span>
-                                        </template>
-                                    </div>
-                                </template>
-                            </div>
-                        </template>
-
                         <!-- Auto-Detection Section -->
                         <template x-if="selectedFile">
                             <div class="mb-6">
@@ -813,10 +729,118 @@
                             </div>
                         </div>
 
+                        <!-- Table Selection Section -->
+                        <template x-if="selectedFile">
+                            <div class="mb-6">
+                                <h3 class="text-sm font-medium text-gray-700 mb-3">Table Selection</h3>
+                                
+                                <!-- Table Option Selection -->
+                                <div class="mb-4">
+                                    <div class="flex items-center space-x-4 mb-3">
+                                        <label class="flex items-center">
+                                            <input 
+                                                type="radio" 
+                                                x-model="tableOption" 
+                                                value="existing" 
+                                                class="mr-2 text-td-green focus:ring-td-green"
+                                            />
+                                            <span class="text-sm font-medium text-gray-700">Use Existing Table</span>
+                                        </label>
+                                        <label class="flex items-center">
+                                            <input 
+                                                type="radio" 
+                                                x-model="tableOption" 
+                                                value="new" 
+                                                class="mr-2 text-td-green focus:ring-td-green"
+                                            />
+                                            <span class="text-sm font-medium text-gray-700">Create New Table</span>
+                                        </label>
+                                    </div>
+                                    
+                                    <!-- Reference Data Config Option -->
+                                    <template x-if="tableOption === 'new'">
+                                        <div class="mt-3 p-3 bg-gray-50 rounded-lg border">
+                                            <label class="flex items-center">
+                                                <input 
+                                                    type="checkbox" 
+                                                    x-model="configReferenceData"
+                                                    class="mr-2 text-td-green focus:ring-td-green"
+                                                />
+                                                <span class="text-sm font-medium text-gray-700">Configure for Ingest into Reference Data Table</span>
+                                            </label>
+                                            <p class="text-xs text-gray-600 mt-1 ml-6">
+                                                Enable to add this table to the reference data configuration for automated processing
+                                            </p>
+                                        </div>
+                                    </template>
+                                </div>
+
+                                <!-- Existing Table Selection -->
+                                <template x-if="tableOption === 'existing'">
+                                    <div class="mb-4">
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Select Existing Table</label>
+                                        <select 
+                                            x-model="selectedTable"
+                                            class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-td-green focus:border-transparent"
+                                            :disabled="disabled"
+                                        >
+                                            <option value="" x-text="schemaMatchedTablesCount > 0 ? `Choose from ${schemaMatchedTablesCount} schema-matched table${schemaMatchedTablesCount > 1 ? 's' : ''}...` : 'No tables match your file schema...'"></option>
+                                            <template x-for="table in availableTables">
+                                                <option :value="table" x-text="table"></option>
+                                            </template>
+                                        </select>
+                                    </div>
+                                </template>
+
+                                <!-- New Table Creation -->
+                                <template x-if="tableOption === 'new'">
+                                    <div class="mb-4">
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">New Table Name</label>
+                                        <input 
+                                            type="text" 
+                                            x-model="newTableName"
+                                            @input="validateTableName"
+                                            :placeholder="suggestedTableName"
+                                            :class="tableNameError ? 'w-full p-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-red-50' : 'w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-td-green focus:border-transparent'"
+                                            :disabled="disabled"
+                                        />
+                                        <template x-if="tableNameError">
+                                            <div class="mt-1 text-sm text-red-600 flex items-center">
+                                                <span class="material-icons text-red-500 mr-1" style="font-size: 16px;">error</span>
+                                                <span x-text="tableNameError"></span>
+                                            </div>
+                                        </template>
+                                        <template x-if="suggestedTableName">
+                                            <div class="mt-2 text-sm text-gray-600">
+                                                Suggested name: <span class="font-medium" x-text="suggestedTableName"></span>
+                                                <button 
+                                                    @click="newTableName = suggestedTableName; validateTableName()"
+                                                    class="ml-2 text-td-green hover:text-td-dark-green font-medium"
+                                                >
+                                                    Use suggested
+                                                </button>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+
+                                <!-- Table Info Display -->
+                                <template x-if="(tableOption === 'existing' && selectedTable) || (tableOption === 'new' && newTableName)">
+                                    <div class="p-3 bg-gray-50 rounded-lg text-sm">
+                                        <span class="font-medium">Target Table:</span>
+                                        <span x-text="tableOption === 'existing' ? selectedTable : newTableName"></span>
+                                        <template x-if="tableOption === 'new'">
+                                            <span class="text-gray-600"> (will be created)</span>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
                         <!-- Upload Button -->
                         <button 
                             @click="handleUpload"
-                            :disabled="!selectedFile || disabled || isUploading"
+                            :disabled="!selectedFile || disabled || isUploading || (tableOption === 'new' && (tableNameError || !newTableName.trim()))"
                             class="inline-flex items-center px-6 py-3 bg-td-green text-white rounded-lg hover:bg-td-green-dark transition-colors font-semibold shadow-td-button hover:shadow-td-button-hover disabled:opacity-50 disabled:cursor-not-allowed text-base"
                         >
                             <span class="material-icons mr-2" x-text="isUploading ? 'sync' : 'cloud_upload'" :class="isUploading ? 'animate-spin' : ''"></span>
@@ -910,6 +934,132 @@
                         </div>
                     </div>
                 </template>
+
+                <!-- Rollback Manager -->
+                <div class="bg-white rounded-xl shadow-td-card border border-gray-200 mb-6">
+                    <div class="p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-lg font-semibold text-gray-800">Rollback Dataset Versions</h2>
+                            <button 
+                                @click="loadBackups"
+                                :disabled="backupsLoading"
+                                class="flex items-center px-3 py-1 text-sm border border-td-green text-td-green rounded hover:bg-td-green hover:text-white transition-colors"
+                            >
+                                <span class="material-icons mr-1 text-base" :class="backupsLoading ? 'animate-spin' : ''">refresh</span>
+                                <span x-text="backupsLoading ? 'Loading...' : 'Refresh'"></span>
+                            </button>
+                        </div>
+
+                        <template x-if="backupsError">
+                            <div class="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm mb-4" x-text="backupsError"></div>
+                        </template>
+
+                        <template x-if="actionMsg">
+                            <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm mb-4" x-text="actionMsg"></div>
+                        </template>
+
+                        <template x-if="backups.length === 0 && !backupsLoading && !backupsError">
+                            <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm mb-4">
+                                No backup tables found. Backup tables are created when data is uploaded and processed.
+                            </div>
+                        </template>
+
+                        <div class="border border-gray-200 rounded-lg overflow-hidden">
+                            <table class="w-full text-sm">
+                                <tbody>
+                                    <tbody>
+                                        <thead class="bg-gray-50">
+                                            <tr>
+                                                <th class="w-8 px-2 py-2"></th>
+                                                <th class="px-4 py-2 text-left">Backup Table</th>
+                                                <th class="px-4 py-2 text-left">Main/Stage</th>
+                                                <th class="px-4 py-2 text-left">Versions</th>
+                                                <th class="px-4 py-2 text-left">Latest</th>
+                                                <th class="px-4 py-2 text-left">Actions</th>
+                                            </tr>
+                                        </thead>
+                                    </tbody>                                    
+                                    <template x-for="(backup, idx) in backups" :key="idx">
+                                        <tbody>
+                                            <tr class="border-t border-gray-200 hover:bg-gray-50">
+                                                <td class="px-2 py-2">
+                                                    <button 
+                                                        @click="toggleBackupExpansion(idx)"
+                                                        class="p-1 hover:bg-gray-200 rounded"
+                                                    >
+                                                        <span class="material-icons text-sm" x-text="expandedBackupRows.has(idx) ? 'expand_less' : 'expand_more'"></span>
+                                                    </button>
+                                                </td>
+                                                <td class="px-4 py-2">
+                                                    <div class="font-mono text-xs" x-text="backup.backup_table"></div>
+                                                    <template x-if="!(backup.has_main && backup.has_stage)">
+                                                        <div class="text-xs text-red-600">Missing related table(s)</div>
+                                                    </template>
+                                                </td>
+                                                <td class="px-4 py-2">
+                                                    <span 
+                                                        class="inline-block px-2 py-1 rounded text-xs mr-1"
+                                                        :class="backup.has_main ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                                                        x-text="backup.has_main ? 'Main OK' : 'Main MISSING'"
+                                                    ></span>
+                                                    <span 
+                                                        class="inline-block px-2 py-1 rounded text-xs"
+                                                        :class="backup.has_stage ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'"
+                                                        x-text="backup.has_stage ? 'Stage OK' : 'Stage MISSING'"
+                                                    ></span>
+                                                </td>
+                                                <td class="px-4 py-2" x-text="backup.version_count"></td>
+                                                <td class="px-4 py-2" x-text="backup.latest_version ?? '-'"></td>
+                                                <td class="px-4 py-2">
+                                                    <div class="flex gap-2">
+                                                        <template x-if="backup.latest_version && backup.has_main && backup.has_stage">
+                                                            <button 
+                                                                @click="viewBackupVersion(backup.base_name, backup.latest_version)"
+                                                                class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
+                                                            >
+                                                                View Latest
+                                                            </button>
+                                                        </template>
+                                                        <template x-if="backup.has_main && backup.has_stage">
+                                                            <button 
+                                                                @click="exportBackupMain(backup.base_name)"
+                                                                class="px-2 py-1 text-xs border border-td-dark-green text-td-dark-green rounded hover:bg-td-dark-green hover:text-white"
+                                                            >
+                                                                Export CSV
+                                                            </button>
+                                                        </template>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            <tr x-show="expandedBackupRows.has(idx)" x-transition>
+                                                <td colspan="6" class="px-0 py-0">
+                                                    <div class="p-4 bg-gray-50 border-t border-gray-200">
+                                                        <h4 class="text-sm font-medium mb-2">Versions for <span x-text="backup.backup_table"></span></h4>
+                                                        <template x-if="backup.version_count === 0">
+                                                            <p class="text-sm text-gray-600">No versions</p>
+                                                        </template>
+                                                        <template x-if="backup.version_count > 0">
+                                                            <div class="flex flex-wrap gap-2">
+                                                                <template x-for="v in Array.from({ length: backup.version_count }, (_, i) => backup.latest_version - i)" :key="v">
+                                                                    <button 
+                                                                        @click="viewBackupVersion(backup.base_name, v)"
+                                                                        class="px-3 py-1 text-xs rounded border cursor-pointer hover:bg-blue-50"
+                                                                        :class="selectedVersion?.ref_data_version_id === v && selectedVersion?.base_name === backup.base_name ? 'bg-blue-100 border-blue-300' : 'bg-white border-gray-300'"
+                                                                        x-text="'v' + v"
+                                                                    ></button>
+                                                                </template>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Reference Data Configuration Display -->
                 <div class="bg-white rounded-xl shadow-td-card border border-gray-200 mb-6">
@@ -1006,7 +1156,7 @@
                 </div>
 
                 <!-- System Logs -->
-                <div class="bg-white rounded-xl shadow-td-card border border-gray-200 mb-6">
+                <div class="bg-white rounded-xl shadow-td-card border border-gray-200">
                     <div class="p-6">
                         <div class="flex justify-between items-center mb-4">
                             <h2 class="text-lg font-semibold text-gray-800">System Logs</h2>
@@ -1132,132 +1282,6 @@
                                 </template>
                             </p>
                         </template>
-                    </div>
-                </div>
-
-                <!-- Rollback Manager -->
-                <div class="bg-white rounded-xl shadow-td-card border border-gray-200">
-                    <div class="p-6">
-                        <div class="flex justify-between items-center mb-4">
-                            <h2 class="text-lg font-semibold text-gray-800">Rollback Dataset Versions</h2>
-                            <button 
-                                @click="loadBackups"
-                                :disabled="backupsLoading"
-                                class="flex items-center px-3 py-1 text-sm border border-td-green text-td-green rounded hover:bg-td-green hover:text-white transition-colors"
-                            >
-                                <span class="material-icons mr-1 text-base" :class="backupsLoading ? 'animate-spin' : ''">refresh</span>
-                                <span x-text="backupsLoading ? 'Loading...' : 'Refresh'"></span>
-                            </button>
-                        </div>
-
-                        <template x-if="backupsError">
-                            <div class="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm mb-4" x-text="backupsError"></div>
-                        </template>
-
-                        <template x-if="actionMsg">
-                            <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm mb-4" x-text="actionMsg"></div>
-                        </template>
-
-                        <template x-if="backups.length === 0 && !backupsLoading && !backupsError">
-                            <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm mb-4">
-                                No backup tables found. Backup tables are created when data is uploaded and processed.
-                            </div>
-                        </template>
-
-                        <div class="border border-gray-200 rounded-lg overflow-hidden">
-                            <table class="w-full text-sm">
-                                <tbody>
-                                    <tbody>
-                                        <thead class="bg-gray-50">
-                                            <tr>
-                                                <th class="w-8 px-2 py-2"></th>
-                                                <th class="px-4 py-2 text-left">Backup Table</th>
-                                                <th class="px-4 py-2 text-left">Main/Stage</th>
-                                                <th class="px-4 py-2 text-left">Versions</th>
-                                                <th class="px-4 py-2 text-left">Latest</th>
-                                                <th class="px-4 py-2 text-left">Actions</th>
-                                            </tr>
-                                        </thead>
-                                    </tbody>                                    
-                                    <template x-for="(backup, idx) in backups" :key="idx">
-                                        <tbody>
-                                            <tr class="border-t border-gray-200 hover:bg-gray-50">
-                                                <td class="px-2 py-2">
-                                                    <button 
-                                                        @click="toggleBackupExpansion(idx)"
-                                                        class="p-1 hover:bg-gray-200 rounded"
-                                                    >
-                                                        <span class="material-icons text-sm" x-text="expandedBackupRows.has(idx) ? 'expand_less' : 'expand_more'"></span>
-                                                    </button>
-                                                </td>
-                                                <td class="px-4 py-2">
-                                                    <div class="font-mono text-xs" x-text="backup.backup_table"></div>
-                                                    <template x-if="!(backup.has_main && backup.has_stage)">
-                                                        <div class="text-xs text-red-600">Missing related table(s)</div>
-                                                    </template>
-                                                </td>
-                                                <td class="px-4 py-2">
-                                                    <span 
-                                                        class="inline-block px-2 py-1 rounded text-xs mr-1"
-                                                        :class="backup.has_main ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
-                                                        x-text="backup.has_main ? 'Main OK' : 'Main MISSING'"
-                                                    ></span>
-                                                    <span 
-                                                        class="inline-block px-2 py-1 rounded text-xs"
-                                                        :class="backup.has_stage ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'"
-                                                        x-text="backup.has_stage ? 'Stage OK' : 'Stage MISSING'"
-                                                    ></span>
-                                                </td>
-                                                <td class="px-4 py-2" x-text="backup.version_count"></td>
-                                                <td class="px-4 py-2" x-text="backup.latest_version ?? '-'"></td>
-                                                <td class="px-4 py-2">
-                                                    <div class="flex gap-2">
-                                                        <template x-if="backup.latest_version && backup.has_main && backup.has_stage">
-                                                            <button 
-                                                                @click="viewBackupVersion(backup.base_name, backup.latest_version)"
-                                                                class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
-                                                            >
-                                                                View Latest
-                                                            </button>
-                                                        </template>
-                                                        <template x-if="backup.has_main && backup.has_stage">
-                                                            <button 
-                                                                @click="exportBackupMain(backup.base_name)"
-                                                                class="px-2 py-1 text-xs border border-td-dark-green text-td-dark-green rounded hover:bg-td-dark-green hover:text-white"
-                                                            >
-                                                                Export CSV
-                                                            </button>
-                                                        </template>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                            <tr x-show="expandedBackupRows.has(idx)" x-transition>
-                                                <td colspan="6" class="px-0 py-0">
-                                                    <div class="p-4 bg-gray-50 border-t border-gray-200">
-                                                        <h4 class="text-sm font-medium mb-2">Versions for <span x-text="backup.backup_table"></span></h4>
-                                                        <template x-if="backup.version_count === 0">
-                                                            <p class="text-sm text-gray-600">No versions</p>
-                                                        </template>
-                                                        <template x-if="backup.version_count > 0">
-                                                            <div class="flex flex-wrap gap-2">
-                                                                <template x-for="v in Array.from({ length: backup.version_count }, (_, i) => backup.latest_version - i)" :key="v">
-                                                                    <button 
-                                                                        @click="viewBackupVersion(backup.base_name, v)"
-                                                                        class="px-3 py-1 text-xs rounded border cursor-pointer hover:bg-blue-50"
-                                                                        :class="selectedVersion?.ref_data_version_id === v && selectedVersion?.base_name === backup.base_name ? 'bg-blue-100 border-blue-300' : 'bg-white border-gray-300'"
-                                                                        x-text="'v' + v"
-                                                                    ></button>
-                                                                </template>
-                                                            </div>
-                                                        </template>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </template>
-                                </tbody>
-                            </table>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -1595,6 +1619,10 @@
                 newTableName: '',
                 suggestedTableName: '',
                 availableTables: [],
+                allTables: [], // All tables for validation
+                schemaMatchedTablesCount: 0,
+                configReferenceData: false,
+                tableNameError: '',
                 
                 // Format configuration
                 formatConfig: {
@@ -1757,8 +1785,8 @@
                             // Generate suggested table name
                             this.generateSuggestedTableName(file.name);
                             
-                            // Fetch available tables
-                            this.fetchAvailableTables();
+                            // Fetch all tables for validation
+                            this.fetchAllTables();
                             
                             // Auto-trigger format detection
                             setTimeout(() => this.detectFormat(), 100);
@@ -1768,6 +1796,11 @@
                         this.uploadError = '';
                         this.suggestedTableName = '';
                         this.newTableName = '';
+                        this.availableTables = [];
+                        this.allTables = [];
+                        this.schemaMatchedTablesCount = 0;
+                        this.configReferenceData = false;
+                        this.tableNameError = '';
                     }
                 },
                 
@@ -1807,6 +1840,8 @@
                         if (response.ok) {
                             const data = await response.json();
                             this.availableTables = data.tables || [];
+                            // Re-validate table name after loading available tables
+                            this.validateTableName();
                         } else {
                             console.error('Failed to fetch tables');
                             this.availableTables = [];
@@ -1814,6 +1849,83 @@
                     } catch (error) {
                         console.error('Error fetching tables:', error);
                         this.availableTables = [];
+                    }
+                },
+                
+                async fetchAllTables() {
+                    try {
+                        const response = await fetch(`${API_BASE_URL}/tables/all`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.allTables = data.tables || [];
+                            // Re-validate table name after loading all tables
+                            this.validateTableName();
+                        } else {
+                            console.error('Failed to fetch all tables');
+                            this.allTables = [];
+                        }
+                    } catch (error) {
+                        console.error('Error fetching all tables:', error);
+                        this.allTables = [];
+                    }
+                },
+                
+                validateTableName() {
+                    this.tableNameError = '';
+                    
+                    if (!this.newTableName || this.newTableName.trim() === '') {
+                        return true; // No error for empty name
+                    }
+                    
+                    const tableName = this.newTableName.trim().toLowerCase();
+                    
+                    // Check if table name conflicts with existing tables
+                    const existingTable = this.allTables.find(table => 
+                        table.toLowerCase() === tableName
+                    );
+                    
+                    if (existingTable) {
+                        this.tableNameError = `Table name "${this.newTableName}" already exists. Please choose a different name.`;
+                        return false;
+                    }
+                    
+                    return true;
+                },
+                
+                async fetchSchemaMatchedTables(columns) {
+                    try {
+                        const response = await fetch(`${API_BASE_URL}/tables/schema-match`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ columns: columns })
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.availableTables = data.tables || [];
+                            this.schemaMatchedTablesCount = data.count || 0;
+                            
+                            // Set "Use Existing Table" as default when there are matched tables
+                            if (this.schemaMatchedTablesCount > 0) {
+                                this.tableOption = 'existing';
+                                // Clear any existing table name error since we're switching to existing table mode
+                                this.tableNameError = '';
+                            } else {
+                                this.tableOption = 'new';
+                            }
+                        } else {
+                            console.error('Failed to fetch schema-matched tables');
+                            this.availableTables = [];
+                            this.schemaMatchedTablesCount = 0;
+                            this.tableOption = 'new';
+                        }
+                    } catch (error) {
+                        console.error('Error fetching schema-matched tables:', error);
+                        this.availableTables = [];
+                        this.schemaMatchedTablesCount = 0;
+                        this.tableOption = 'new';
                     }
                 },
                 
@@ -1857,6 +1969,11 @@
                                 skip_lines: result.detected_format.skip_lines,
                                 trailer_line: result.detected_format.trailer_line || ''
                             };
+                        }
+                        
+                        // Fetch schema-matched tables if we have column information
+                        if (result.analysis && result.analysis.columns) {
+                            await this.fetchSchemaMatchedTables(result.analysis.columns);
                         }
                         
                     } catch (error) {
@@ -1917,6 +2034,11 @@
                     if (overrideLoadType) {
                         formData.append('override_load_type', overrideLoadType);
                     }
+                    
+                    // Add reference data configuration flag
+                    // For existing tables, always skip reference_data_cfg insertion
+                    const shouldConfigReferenceData = this.tableOption === 'new' ? this.configReferenceData : false;
+                    formData.append('config_reference_data', shouldConfigReferenceData.toString());
                     
                     const response = await fetch(`${API_BASE_URL}/upload`, {
                         method: 'POST',

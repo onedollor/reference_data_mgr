@@ -413,7 +413,8 @@ async def detect_csv_format(file: UploadFile = File(...)):
                 "estimated_columns": detection_result.get("estimated_columns", 0),
                 "sample_rows": detection_result.get("sample_rows", 0),
                 "trailer_format": detection_result.get("trailer_format"),
-                "sample_data": detection_result.get("sample_data", [])[:3]  # First 3 rows
+                "sample_data": detection_result.get("sample_data", [])[:3],  # First 3 rows
+                "columns": detection_result.get("sample_data", [[]])[0] if detection_result.get("has_header", True) and detection_result.get("sample_data") else []
             },
             "error": detection_result.get("error")
         }
@@ -437,7 +438,8 @@ async def upload_file(
     skip_lines: int = Form(0),
     trailer_line: Optional[str] = Form(None),
     load_mode: str = Form("full"),  # full or append
-    override_load_type: Optional[str] = Form(None)  # Optional override for load type
+    override_load_type: Optional[str] = Form(None),  # Optional override for load type
+    config_reference_data: bool = Form(False)  # Configure for reference data
 ):
     """Upload and process CSV file"""
     try:
@@ -470,7 +472,8 @@ async def upload_file(
             fmt_file_path,
             load_mode,
             file.filename,
-            override_load_type
+            override_load_type,
+            config_reference_data
         )
         
         return {
@@ -601,14 +604,15 @@ async def ingest_data_background(
     fmt_file_path: str, 
     load_mode: str, 
     filename: str,
-    override_load_type: str = None
+    override_load_type: str = None,
+    config_reference_data: bool = False
 ):
     """Background task for data ingestion"""
     try:
         from utils.ingest import DataIngester
         ingester = DataIngester(db_manager, logger)
         
-        async for progress in ingester.ingest_data(file_path, fmt_file_path, load_mode, filename, override_load_type):
+        async for progress in ingester.ingest_data(file_path, fmt_file_path, load_mode, filename, override_load_type, config_reference_data):
             await logger.log_info("background_ingestion", f"Progress: {progress}")
             
     except Exception as e:
@@ -816,6 +820,48 @@ async def get_reference_data_config():
             except Exception:
                 pass
 
+@app.get("/tables/all")
+async def get_all_tables():
+    """Get list of ALL tables in the database for validation purposes"""
+    connection = None
+    try:
+        connection = db_manager.get_connection()
+        cursor = connection.cursor()
+        
+        # Query to get ALL table names (including system tables)
+        query = f"""
+            SELECT TABLE_NAME 
+            FROM [{db_manager.database}].INFORMATION_SCHEMA.TABLES 
+            WHERE TABLE_TYPE = 'BASE TABLE'
+            ORDER BY TABLE_NAME
+        """
+        cursor.execute(query)
+        
+        # Extract all table names from results
+        tables = [row[0] for row in cursor.fetchall()]
+        
+        await logger.log_info("all_tables_query", f"Retrieved {len(tables)} total tables for validation")
+        
+        return JSONResponse(
+            content={"tables": tables, "count": len(tables)},
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
+        
+    except Exception as e:
+        error_msg = f"Failed to retrieve all tables: {str(e)}"
+        await logger.log_error("all_tables_query", error_msg, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=error_msg)
+    finally:
+        if connection:
+            try:
+                connection.close()
+            except Exception:
+                pass
+
 @app.get("/tables")
 async def get_available_tables():
     """Get list of available tables in the database"""
@@ -867,6 +913,96 @@ async def get_available_tables():
     except Exception as e:
         error_msg = f"Failed to retrieve available tables: {str(e)}"
         await logger.log_error("tables_query", error_msg, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=error_msg)
+    finally:
+        if connection:
+            try:
+                connection.close()
+            except Exception:
+                pass
+
+@app.post("/tables/schema-match")
+async def get_schema_matched_tables(file_columns: Dict[str, List[str]]):
+    """Get tables that match the schema of the uploaded file"""
+    connection = None
+    try:
+        connection = db_manager.get_connection()
+        
+        # Extract columns from the request
+        columns = file_columns.get("columns", [])
+        if not columns:
+            return JSONResponse(
+                content={"tables": [], "count": 0, "message": "No columns provided"},
+                headers={
+                    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                    "Pragma": "no-cache",
+                    "Expires": "0"
+                }
+            )
+        
+        # Get all available tables with complete sets
+        cursor = connection.cursor()
+        query = f"""
+            WITH all_tables AS (
+                SELECT TABLE_NAME 
+                FROM [{db_manager.database}].INFORMATION_SCHEMA.TABLES 
+                WHERE TABLE_TYPE = 'BASE TABLE'
+            ),
+            main_tables AS (
+                SELECT TABLE_NAME as main_table
+                FROM all_tables 
+                WHERE TABLE_NAME NOT LIKE '%_stage' 
+                AND TABLE_NAME NOT LIKE '%_backup'
+                AND TABLE_NAME NOT IN ('Reference_Data_Cfg', 'system_log')
+            )
+            SELECT m.main_table
+            FROM main_tables m
+            WHERE EXISTS (
+                SELECT 1 FROM all_tables WHERE TABLE_NAME = m.main_table + '_stage'
+            )
+            AND EXISTS (
+                SELECT 1 FROM all_tables WHERE TABLE_NAME = m.main_table + '_backup'  
+            )
+            ORDER BY m.main_table
+        """
+        cursor.execute(query)
+        all_tables = [row[0] for row in cursor.fetchall()]
+        
+        # Filter tables by schema match
+        matching_tables = []
+        file_columns_set = set(col.lower().strip() for col in columns)
+        
+        for table_name in all_tables:
+            try:
+                # Get table columns (excluding metadata columns)
+                table_columns = db_manager.get_table_columns(connection, table_name, db_manager.data_schema)
+                exclude_meta = {'ref_data_loadtime', 'ref_data_loadtype'}
+                table_columns_set = set(col['name'].lower() for col in table_columns 
+                                      if col['name'].lower() not in exclude_meta)
+                
+                # Check if file columns match table columns exactly
+                if file_columns_set == table_columns_set:
+                    matching_tables.append(table_name)
+                    
+            except Exception as e:
+                # Skip tables that can't be queried
+                await logger.log_warning("schema_match", f"Could not check schema for table {table_name}: {str(e)}")
+                continue
+        
+        await logger.log_info("schema_match", f"Found {len(matching_tables)} schema-matched tables out of {len(all_tables)} total tables")
+        
+        return JSONResponse(
+            content={"tables": matching_tables, "count": len(matching_tables)},
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache", 
+                "Expires": "0"
+            }
+        )
+        
+    except Exception as e:
+        error_msg = f"Failed to retrieve schema-matched tables: {str(e)}"
+        await logger.log_error("schema_match", error_msg, traceback.format_exc())
         raise HTTPException(status_code=500, detail=error_msg)
     finally:
         if connection:

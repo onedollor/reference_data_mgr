@@ -45,7 +45,8 @@ class DataIngester:
         fmt_file_path: str, 
         load_mode: str, 
         filename: str,
-        override_load_type: str = None
+        override_load_type: str = None,
+        config_reference_data: bool = False
     ) -> AsyncGenerator[str, None]:
         """Main ingestion function.
         Simplified: always reads full file then performs multi-row INSERT batching (≤990 rows per statement).
@@ -426,21 +427,28 @@ class DataIngester:
                 f"Successfully ingested {final_rows} rows from {filename} to table {table_name}"
             )
             
-            # Insert/update record in Reference_Data_Cfg table and call post-load procedure
-            try:
-                self.db_manager.insert_reference_data_cfg_record(connection, table_name)
-                yield f"Reference_Data_Cfg record processed and post-load procedure called for table {table_name}"
+            # Insert/update record in Reference_Data_Cfg table and call post-load procedure (if configured)
+            if config_reference_data:
+                try:
+                    self.db_manager.insert_reference_data_cfg_record(connection, table_name)
+                    yield f"Reference_Data_Cfg record processed and post-load procedure called for table {table_name}"
+                    await self.logger.log_info(
+                        "reference_data_cfg",
+                        f"Reference_Data_Cfg record processed and ref.{self.db_manager.postload_sp_name} called for table {table_name}"
+                    )
+                except Exception as cfg_error:
+                    # Log warning but don't fail the entire ingestion
+                    warning_msg = f"Warning: Failed to process Reference_Data_Cfg or call post-load procedure: {str(cfg_error)}"
+                    yield f"WARNING: {warning_msg}"
+                    await self.logger.log_warning(
+                        "reference_data_cfg_error",
+                        warning_msg
+                    )
+            else:
+                yield f"Skipping Reference_Data_Cfg record insertion as requested"
                 await self.logger.log_info(
-                    "reference_data_cfg",
-                    f"Reference_Data_Cfg record processed and ref.{self.db_manager.postload_sp_name} called for table {table_name}"
-                )
-            except Exception as cfg_error:
-                # Log warning but don't fail the entire ingestion
-                warning_msg = f"Warning: Failed to process Reference_Data_Cfg or call post-load procedure: {str(cfg_error)}"
-                yield f"WARNING: {warning_msg}"
-                await self.logger.log_warning(
-                    "reference_data_cfg_error",
-                    warning_msg
+                    "reference_data_cfg_skip",
+                    f"Skipped Reference_Data_Cfg record insertion for table {table_name} as config_reference_data=False"
                 )
 
         except Exception as e:
