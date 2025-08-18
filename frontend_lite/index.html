@@ -567,6 +567,90 @@
                             </template>
                         </div>
 
+                        <!-- Table Selection Section -->
+                        <template x-if="selectedFile">
+                            <div class="mb-6">
+                                <h3 class="text-sm font-medium text-gray-700 mb-3">Table Selection</h3>
+                                
+                                <!-- Table Option Selection -->
+                                <div class="mb-4">
+                                    <div class="flex items-center space-x-4 mb-3">
+                                        <label class="flex items-center">
+                                            <input 
+                                                type="radio" 
+                                                x-model="tableOption" 
+                                                value="existing" 
+                                                class="mr-2 text-td-green focus:ring-td-green"
+                                            />
+                                            <span class="text-sm font-medium text-gray-700">Use Existing Table</span>
+                                        </label>
+                                        <label class="flex items-center">
+                                            <input 
+                                                type="radio" 
+                                                x-model="tableOption" 
+                                                value="new" 
+                                                class="mr-2 text-td-green focus:ring-td-green"
+                                            />
+                                            <span class="text-sm font-medium text-gray-700">Create New Table</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Existing Table Selection -->
+                                <template x-if="tableOption === 'existing'">
+                                    <div class="mb-4">
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Select Existing Table</label>
+                                        <select 
+                                            x-model="selectedTable"
+                                            class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-td-green focus:border-transparent"
+                                            :disabled="disabled"
+                                        >
+                                            <option value="">Choose a table...</option>
+                                            <template x-for="table in availableTables">
+                                                <option :value="table" x-text="table"></option>
+                                            </template>
+                                        </select>
+                                    </div>
+                                </template>
+
+                                <!-- New Table Creation -->
+                                <template x-if="tableOption === 'new'">
+                                    <div class="mb-4">
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">New Table Name</label>
+                                        <input 
+                                            type="text" 
+                                            x-model="newTableName"
+                                            :placeholder="suggestedTableName"
+                                            class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-td-green focus:border-transparent"
+                                            :disabled="disabled"
+                                        />
+                                        <template x-if="suggestedTableName">
+                                            <div class="mt-2 text-sm text-gray-600">
+                                                Suggested name: <span class="font-medium" x-text="suggestedTableName"></span>
+                                                <button 
+                                                    @click="newTableName = suggestedTableName"
+                                                    class="ml-2 text-td-green hover:text-td-dark-green font-medium"
+                                                >
+                                                    Use suggested
+                                                </button>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+
+                                <!-- Table Info Display -->
+                                <template x-if="(tableOption === 'existing' && selectedTable) || (tableOption === 'new' && newTableName)">
+                                    <div class="p-3 bg-gray-50 rounded-lg text-sm">
+                                        <span class="font-medium">Target Table:</span>
+                                        <span x-text="tableOption === 'existing' ? selectedTable : newTableName"></span>
+                                        <template x-if="tableOption === 'new'">
+                                            <span class="text-gray-600"> (will be created)</span>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
                         <!-- Auto-Detection Section -->
                         <template x-if="selectedFile">
                             <div class="mb-6">
@@ -1160,7 +1244,7 @@
                                                                     <button 
                                                                         @click="viewBackupVersion(backup.base_name, v)"
                                                                         class="px-3 py-1 text-xs rounded border cursor-pointer hover:bg-blue-50"
-                                                                        :class="selectedVersion?.version_id === v && selectedVersion?.base_name === backup.base_name ? 'bg-blue-100 border-blue-300' : 'bg-white border-gray-300'"
+                                                                        :class="selectedVersion?.ref_data_version_id === v && selectedVersion?.base_name === backup.base_name ? 'bg-blue-100 border-blue-300' : 'bg-white border-gray-300'"
                                                                         x-text="'v' + v"
                                                                     ></button>
                                                                 </template>
@@ -1273,7 +1357,7 @@
         <div class="bg-white rounded-xl max-w-7xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div class="px-6 py-4 border-b border-gray-200">
                 <h3 class="text-lg font-semibold text-td-green">
-                    Version Details - <span x-text="selectedVersion?.base_name"></span> v<span x-text="selectedVersion?.version_id"></span>
+                    Version Details - <span x-text="selectedVersion?.base_name"></span> v<span x-text="selectedVersion?.ref_data_version_id"></span>
                 </h3>
             </div>
             
@@ -1293,7 +1377,7 @@
                                     </button>
                                     <select 
                                         x-model="rowLimit"
-                                        @change="loadVersion(selectedVersion.base_name, selectedVersion.version_id, rowLimit)"
+                                        @change="loadVersion(selectedVersion.base_name, selectedVersion.ref_data_version_id, rowLimit)"
                                         class="mui-select-small"
                                     >
                                         <option value="50">50</option>
@@ -1304,7 +1388,7 @@
                                         <option value="1000">1000</option>
                                     </select>
                                     <button 
-                                        @click="loadVersion(selectedVersion.base_name, selectedVersion.version_id, rowLimit)"
+                                        @click="loadVersion(selectedVersion.base_name, selectedVersion.ref_data_version_id, rowLimit)"
                                         class="mui-button-small mui-button-text-primary"
                                     >
                                         Reload
@@ -1439,7 +1523,7 @@
                         class="flex items-center px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
                     >
                         <span class="material-icons mr-2">restore</span>
-                        Rollback to v<span x-text="selectedVersion.version_id"></span>
+                        Rollback to v<span x-text="selectedVersion.ref_data_version_id"></span>
                     </button>
                 </template>
                 <button 
@@ -1467,7 +1551,7 @@
             <div class="p-6">
                 <template x-if="confirmRollback">
                     <p class="text-sm">
-                        Are you sure you want to rollback <strong x-text="confirmRollback.base_name"></strong> to version <strong x-text="confirmRollback.version_id"></strong>? This will replace current data.
+                        Are you sure you want to rollback <strong x-text="confirmRollback.base_name"></strong> to version <strong x-text="confirmRollback.ref_data_version_id"></strong>? This will replace current data.
                     </p>
                 </template>
             </div>
@@ -1504,6 +1588,13 @@
                 isUploading: false,
                 uploadProgress: null,
                 disabled: false,
+                
+                // Table selection state
+                tableOption: 'new',
+                selectedTable: '',
+                newTableName: '',
+                suggestedTableName: '',
+                availableTables: [],
                 
                 // Format configuration
                 formatConfig: {
@@ -1663,12 +1754,66 @@
                                 analysis: null
                             };
                             
+                            // Generate suggested table name
+                            this.generateSuggestedTableName(file.name);
+                            
+                            // Fetch available tables
+                            this.fetchAvailableTables();
+                            
                             // Auto-trigger format detection
                             setTimeout(() => this.detectFormat(), 100);
                         }
                     } else {
                         this.selectedFile = null;
                         this.uploadError = '';
+                        this.suggestedTableName = '';
+                        this.newTableName = '';
+                    }
+                },
+                
+                generateSuggestedTableName(fileName) {
+                    // Remove file extension and clean up the name
+                    let tableName = fileName.replace(/\.[^/.]+$/, '');
+                    
+                    // Replace spaces, hyphens, and other special characters with underscores
+                    tableName = tableName.replace(/[^a-zA-Z0-9_]/g, '_');
+                    
+                    // Remove consecutive underscores
+                    tableName = tableName.replace(/_+/g, '_');
+                    
+                    // Remove leading/trailing underscores
+                    tableName = tableName.replace(/^_+|_+$/g, '');
+                    
+                    // Ensure it starts with a letter or underscore (database naming convention)
+                    if (tableName && !/^[a-zA-Z_]/.test(tableName)) {
+                        tableName = 'tbl_' + tableName;
+                    }
+                    
+                    // Convert to lowercase
+                    tableName = tableName.toLowerCase();
+                    
+                    // Set minimum length
+                    if (tableName.length < 3) {
+                        tableName = 'uploaded_data';
+                    }
+                    
+                    this.suggestedTableName = tableName;
+                    this.newTableName = tableName; // Auto-populate the input
+                },
+                
+                async fetchAvailableTables() {
+                    try {
+                        const response = await fetch(`${API_BASE_URL}/tables`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.availableTables = data.tables || [];
+                        } else {
+                            console.error('Failed to fetch tables');
+                            this.availableTables = [];
+                        }
+                    } catch (error) {
+                        console.error('Error fetching tables:', error);
+                        this.availableTables = [];
                     }
                 },
                 
@@ -2082,7 +2227,7 @@
                 },
                 
                 async viewBackupVersion(baseName, versionId) {
-                    this.selectedVersion = { base_name: baseName, version_id: versionId };
+                    this.selectedVersion = { base_name: baseName, ref_data_version_id: versionId };
                     this.clearAllFilters();
                     await this.loadVersion(baseName, versionId, this.rowLimit);
                 },
@@ -2102,7 +2247,7 @@
                 
                 getVersionData() {
                     if (!this.selectedVersion) return null;
-                    const key = `${this.selectedVersion.base_name}|${this.selectedVersion.version_id}`;
+                    const key = `${this.selectedVersion.base_name}|${this.selectedVersion.ref_data_version_id}`;
                     return this.versionRows[key];
                 },
                 
@@ -2151,7 +2296,7 @@
                     if (!this.selectedVersion) return;
                     
                     try {
-                        const response = await fetch(`${API_BASE_URL}/backups/${this.selectedVersion.base_name}/versions/${this.selectedVersion.version_id}/export`, {
+                        const response = await fetch(`${API_BASE_URL}/backups/${this.selectedVersion.base_name}/versions/${this.selectedVersion.ref_data_version_id}/export`, {
                             headers: { 'Accept': 'text/csv' }
                         });
                         
@@ -2190,11 +2335,11 @@
                 async handleRollback() {
                     if (!this.confirmRollback) return;
                     
-                    const { base_name, version_id } = this.confirmRollback;
+                    const { base_name, ref_data_version_id } = this.confirmRollback;
                     this.actionMsg = '';
                     
                     try {
-                        const response = await fetch(`${API_BASE_URL}/backups/${base_name}/rollback/${version_id}`, {
+                        const response = await fetch(`${API_BASE_URL}/backups/${base_name}/rollback/${ref_data_version_id}`, {
                             method: 'POST'
                         });
                         const data = await response.json();

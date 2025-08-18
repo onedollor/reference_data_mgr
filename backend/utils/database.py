@@ -251,7 +251,7 @@ class DatabaseManager:
         # Add metadata columns if requested
         if add_metadata_columns:
             column_defs.append("[ref_data_loadtime] datetime DEFAULT GETDATE()")
-            column_defs.append("[loadtype] varchar(255)")
+            column_defs.append("[ref_data_loadtype] varchar(255)")
         
         # Create the table
         create_sql = f"""
@@ -302,8 +302,8 @@ class DatabaseManager:
         # Add backup-specific columns
         column_defs.extend([
             "[ref_data_loadtime] datetime",
-            "[loadtype] varchar(255)",
-            "[version_id] int NOT NULL"
+            "[ref_data_loadtype] varchar(255)",
+            "[ref_data_version_id] int NOT NULL"
         ])
         
         # Create the backup table with proper schema quoting
@@ -321,7 +321,7 @@ class DatabaseManager:
             
             # Filter out backup-specific metadata columns
             data_columns = [col for col in existing_columns 
-                           if col['name'] not in ['ref_data_loadtime', 'loadtype', 'version_id']]
+                           if col['name'] not in ['ref_data_loadtime', 'ref_data_loadtype', 'ref_data_version_id']]
             
             # Create comparison sets (normalize data types)
             expected_set = set()
@@ -431,8 +431,8 @@ class DatabaseManager:
         # Define required backup metadata columns
         backup_metadata_columns = [
             {"name": "ref_data_loadtime", "data_type": "datetime", "default": ""},
-            {"name": "loadtype", "data_type": "varchar(255)", "default": ""},
-            {"name": "version_id", "data_type": "int NOT NULL", "default": ""}
+            {"name": "ref_data_loadtype", "data_type": "varchar(255)", "default": ""},
+            {"name": "ref_data_version_id", "data_type": "int NOT NULL", "default": ""}
         ]
         
         for meta_col in backup_metadata_columns:
@@ -454,7 +454,7 @@ class DatabaseManager:
         
         try:
             # Get the next version ID - use dynamic SQL with proper quoting
-            version_sql = "SELECT COALESCE(MAX(version_id), 0) + 1 FROM [" + self.backup_schema + "].[" + backup_table + "_backup]"
+            version_sql = "SELECT COALESCE(MAX(ref_data_version_id), 0) + 1 FROM [" + self.backup_schema + "].[" + backup_table + "_backup]"
             cursor.execute(version_sql)
             next_version = cursor.fetchone()[0]
             
@@ -501,7 +501,7 @@ class DatabaseManager:
         return result[0] if result else 0
     
     def ensure_metadata_columns(self, connection: pyodbc.Connection, table_name: str, schema: str = None) -> Dict[str, Any]:
-        """Ensure metadata columns (ref_data_loadtime, loadtype) exist in the table"""
+        """Ensure metadata columns (ref_data_loadtime, ref_data_loadtype) exist in the table"""
         if schema is None:
             schema = self.data_schema
         
@@ -513,7 +513,7 @@ class DatabaseManager:
         # Define required metadata columns
         metadata_columns = [
             {"name": "ref_data_loadtime", "data_type": "datetime", "default": "DEFAULT GETDATE()"},
-            {"name": "loadtype", "data_type": "varchar(255)", "default": ""}
+            {"name": "ref_data_loadtype", "data_type": "varchar(255)", "default": ""}
         ]
         
         for meta_col in metadata_columns:
@@ -713,11 +713,11 @@ class DatabaseManager:
     
     def determine_load_type(self, connection: pyodbc.Connection, table_name: str, current_load_mode: str, override_load_type: str = None) -> str:
         """
-        Determine the loadtype value based on existing data and current load mode.
+        Determine the ref_data_loadtype value based on existing data and current load mode.
         Rules:
         - If override_load_type provided: Use override ('F' or 'A')
         - First time ingest: Use current load mode ('F' for full, 'A' for append)
-        - Subsequent ingests: Check existing distinct loadtype values
+        - Subsequent ingests: Check existing distinct ref_data_loadtype values
           - If only 'F' exists: Use 'F'
           - If only 'A' exists: Use 'A' 
           - If both 'A' and 'F' exist: Use 'F'
@@ -741,8 +741,8 @@ class DatabaseManager:
                 # Empty table - use current load mode
                 return 'F' if current_load_mode == 'full' else 'A'
             
-            # Get distinct loadtype values from existing data
-            query = f"SELECT DISTINCT [loadtype] FROM [{self.data_schema}].[{table_name}] WHERE [loadtype] IS NOT NULL"
+            # Get distinct ref_data_loadtype values from existing data
+            query = f"SELECT DISTINCT [ref_data_loadtype] FROM [{self.data_schema}].[{table_name}] WHERE [ref_data_loadtype] IS NOT NULL"
             cursor.execute(query)
             existing_types = set()
             for row in cursor.fetchall():
@@ -751,7 +751,7 @@ class DatabaseManager:
             
             # Apply rules
             if not existing_types:
-                # No existing loadtype data - use current load mode
+                # No existing ref_data_loadtype data - use current load mode
                 return 'F' if current_load_mode == 'full' else 'A'
             elif 'F' in existing_types and 'A' in existing_types:
                 # Both F and A exist - return F
@@ -797,7 +797,7 @@ class DatabaseManager:
             try:
                 v_cursor = connection.cursor()
                 v_cursor.execute(
-                    "SELECT COUNT(DISTINCT version_id), MAX(version_id) FROM [" + self.backup_schema + "].[" + backup_table + "]"
+                    "SELECT COUNT(DISTINCT ref_data_version_id), MAX(ref_data_version_id) FROM [" + self.backup_schema + "].[" + backup_table + "]"
                 )
                 vrow = v_cursor.fetchone()
                 if vrow:
@@ -816,20 +816,20 @@ class DatabaseManager:
         return results
 
     def get_backup_versions(self, connection: pyodbc.Connection, base_name: str) -> List[int]:
-        """Return list of version_ids for a given backup base name (descending)."""
+        """Return list of ref_data_version_ids for a given backup base name (descending)."""
         if not base_name or not re.match(r'^[A-Za-z0-9_]+$', base_name):
             return []
         backup_table = f"{base_name}_backup"
         cursor = connection.cursor()
         try:
             cursor.execute(
-                "SELECT DISTINCT version_id FROM [" + self.backup_schema + "].[" + backup_table + "] ORDER BY version_id DESC"
+                "SELECT DISTINCT ref_data_version_id FROM [" + self.backup_schema + "].[" + backup_table + "] ORDER BY ref_data_version_id DESC"
             )
             return [row[0] for row in cursor.fetchall() if row[0] is not None]
         except Exception:
             return []
 
-    def get_backup_version_rows(self, connection: pyodbc.Connection, base_name: str, version_id: int, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+    def get_backup_version_rows(self, connection: pyodbc.Connection, base_name: str, ref_data_version_id: int, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
         """Return rows for a version with pagination (offset, limit) plus columns & total row count.
         Enforces 1 <= limit <= 1000. Offset >= 0.
         """
@@ -861,14 +861,14 @@ class DatabaseManager:
             col_names = [c['name'] for c in cols]
             result['columns'] = col_names
             # total rows for version
-            count_sql = "SELECT COUNT(*) FROM [" + self.backup_schema + "].[" + backup_table + "] WHERE version_id = ?"
-            cursor.execute(count_sql, version_id)
+            count_sql = "SELECT COUNT(*) FROM [" + self.backup_schema + "].[" + backup_table + "] WHERE ref_data_version_id = ?"
+            cursor.execute(count_sql, ref_data_version_id)
             result['total_rows'] = cursor.fetchone()[0]
             # paged rows (order by first column for deterministic paging)
             select_sql = (
-                "SELECT * FROM [" + self.backup_schema + "].[" + backup_table + "] WHERE version_id = ? ORDER BY 1 OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
+                "SELECT * FROM [" + self.backup_schema + "].[" + backup_table + "] WHERE ref_data_version_id = ? ORDER BY 1 OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
             )
-            cursor.execute(select_sql, version_id, offset, limit)
+            cursor.execute(select_sql, ref_data_version_id, offset, limit)
             for row in cursor.fetchall():
                 # pyodbc row -> list
                 result['rows'].append([row[i] for i in range(len(row))])
@@ -876,10 +876,10 @@ class DatabaseManager:
             result['error'] = str(e)
         return result
 
-    def rollback_to_version(self, connection: pyodbc.Connection, base_name: str, version_id: int) -> Dict[str, Any]:
+    def rollback_to_version(self, connection: pyodbc.Connection, base_name: str, ref_data_version_id: int) -> Dict[str, Any]:
         """Rollback main (and stage if exists) table to data from specified backup version.
         Returns dict with counts and actions."""
-        outcome = {'base_name': base_name, 'version_id': version_id, 'main_rows': 0, 'stage_rows': 0, 'status': 'started'}
+        outcome = {'base_name': base_name, 'ref_data_version_id': ref_data_version_id, 'main_rows': 0, 'stage_rows': 0, 'status': 'started'}
         if not base_name or not re.match(r'^[A-Za-z0-9_]+$', base_name):
             outcome['status'] = 'invalid_base_name'
             return outcome
@@ -893,11 +893,11 @@ class DatabaseManager:
         try:
             connection.autocommit = False
             cursor = connection.cursor()
-            # Determine intersection columns between backup and main (exclude version_id)
-            backup_cols = [c['name'] for c in self.get_table_columns(connection, backup_table, self.backup_schema) if c['name'].lower() != 'version_id']
+            # Determine intersection columns between backup and main (exclude ref_data_version_id)
+            backup_cols = [c['name'] for c in self.get_table_columns(connection, backup_table, self.backup_schema) if c['name'].lower() != 'ref_data_version_id']
             main_cols = [c['name'] for c in self.get_table_columns(connection, base_name, self.data_schema)]
             # Exclude metadata columns that may not exist in main
-            exclude_meta = {'version_id'}
+            exclude_meta = {'ref_data_version_id'}
             common_cols = [c for c in backup_cols if c in main_cols and c.lower() not in exclude_meta]
             if not common_cols:
                 raise Exception('No common columns between backup and main tables')
@@ -907,17 +907,17 @@ class DatabaseManager:
             # Insert from backup version
             insert_sql = (
                 "INSERT INTO [" + self.data_schema + "].[" + base_name + "] (" + col_list + ") "
-                "SELECT " + col_list + " FROM [" + self.backup_schema + "].[" + backup_table + "] WHERE version_id = ?"
+                "SELECT " + col_list + " FROM [" + self.backup_schema + "].[" + backup_table + "] WHERE ref_data_version_id = ?"
             )
-            cursor.execute(insert_sql, version_id)
+            cursor.execute(insert_sql, ref_data_version_id)
             outcome['main_rows'] = cursor.rowcount if cursor.rowcount is not None else 0
             # Stage table optional
             if stage_exists:
                 # Use same columns intersection for stage
                 cursor.execute("TRUNCATE TABLE [" + self.data_schema + "].[" + stage_name + "]")
                 cursor.execute(
-                    "INSERT INTO [" + self.data_schema + "].[" + stage_name + "] (" + col_list + ") SELECT " + col_list + " FROM [" + self.backup_schema + "].[" + backup_table + "] WHERE version_id = ?",
-                    version_id
+                    "INSERT INTO [" + self.data_schema + "].[" + stage_name + "] (" + col_list + ") SELECT " + col_list + " FROM [" + self.backup_schema + "].[" + backup_table + "] WHERE ref_data_version_id = ?",
+                    ref_data_version_id
                 )
                 outcome['stage_rows'] = cursor.rowcount if cursor.rowcount is not None else 0
             connection.commit()

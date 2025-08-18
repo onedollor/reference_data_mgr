@@ -163,11 +163,11 @@ async def get_backup_versions(base_name: str):
         await logger.log_error("get_backup_versions", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/backups/{base_name}/versions/{version_id}")
-async def view_backup_version(base_name: str, version_id: int, limit: int = 50, offset: int = 0):
+@app.get("/backups/{base_name}/versions/{ref_data_version_id}")
+async def view_backup_version(base_name: str, ref_data_version_id: int, limit: int = 50, offset: int = 0):
     try:
         conn = db_manager.get_connection()
-        data = db_manager.get_backup_version_rows(conn, base_name, version_id, limit, offset)
+        data = db_manager.get_backup_version_rows(conn, base_name, ref_data_version_id, limit, offset)
         conn.close()
         if data.get('error'):
             raise HTTPException(status_code=400, detail=data['error'])
@@ -178,15 +178,15 @@ async def view_backup_version(base_name: str, version_id: int, limit: int = 50, 
         await logger.log_error("view_backup_version", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/backups/{base_name}/rollback/{version_id}")
-async def rollback_backup_version(base_name: str, version_id: int):
+@app.post("/backups/{base_name}/rollback/{ref_data_version_id}")
+async def rollback_backup_version(base_name: str, ref_data_version_id: int):
     try:
         conn = db_manager.get_connection()
-        outcome = db_manager.rollback_to_version(conn, base_name, version_id)
+        outcome = db_manager.rollback_to_version(conn, base_name, ref_data_version_id)
         conn.close()
         if outcome.get('status') == 'error':
             raise HTTPException(status_code=400, detail=outcome.get('error', 'Rollback failed'))
-        await logger.log_info("rollback", f"Rollback executed for {base_name} to version {version_id}: status={outcome.get('status')}")
+        await logger.log_info("rollback", f"Rollback executed for {base_name} to version {ref_data_version_id}: status={outcome.get('status')}")
         return outcome
     except HTTPException:
         raise
@@ -208,7 +208,7 @@ async def export_main_table_csv(base_name: str):
         # Fetch columns
         cols_meta = db_manager.get_table_columns(conn, base_name, db_manager.data_schema)
         # Exclude internal/meta columns from export
-        exclude_cols = {"ref_data_loadtime", "loadtype"}
+        exclude_cols = {"ref_data_loadtime", "ref_data_loadtype"}
         col_names = [c['name'] for c in cols_meta if c['name'].lower() not in exclude_cols]
         if not col_names:
             conn.close()
@@ -261,8 +261,8 @@ async def export_main_table_csv(base_name: str):
         await logger.log_error("export_main_table", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/backups/{base_name}/versions/{version_id}/export")
-async def export_backup_version_csv(base_name: str, version_id: int):
+@app.get("/backups/{base_name}/versions/{ref_data_version_id}/export")
+async def export_backup_version_csv(base_name: str, ref_data_version_id: int):
     """Export a specific backup table version as CSV (excluding version/metadata columns)."""
     try:
         if not re.fullmatch(r"[A-Za-z0-9_]+", base_name):
@@ -275,24 +275,24 @@ async def export_backup_version_csv(base_name: str, version_id: int):
         # Validate version exists
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT TOP 1 1 FROM [" + db_manager.backup_schema + "].[" + backup_table + "] WHERE version_id = ?",
-            version_id
+            "SELECT TOP 1 1 FROM [" + db_manager.backup_schema + "].[" + backup_table + "] WHERE ref_data_version_id = ?",
+            ref_data_version_id
         )
         if cursor.fetchone() is None:
             conn.close()
             raise HTTPException(status_code=404, detail="Version not found")
         # Columns excluding metadata
         cols_meta = db_manager.get_table_columns(conn, backup_table, db_manager.backup_schema)
-        exclude_cols = {"ref_data_loadtime", "loadtype", "version_id"}
+        exclude_cols = {"ref_data_loadtime", "ref_data_loadtype", "ref_data_version_id"}
         col_names = [c['name'] for c in cols_meta if c['name'].lower() not in exclude_cols]
         if not col_names:
             conn.close()
             raise HTTPException(status_code=400, detail="No exportable columns")
         select_sql = (
             "SELECT " + ", ".join(f"[{c}]" for c in col_names) +
-            " FROM [" + db_manager.backup_schema + "].[" + backup_table + "] WHERE version_id = ?"
+            " FROM [" + db_manager.backup_schema + "].[" + backup_table + "] WHERE ref_data_version_id = ?"
         )
-        cursor.execute(select_sql, version_id)
+        cursor.execute(select_sql, ref_data_version_id)
 
         def row_to_csv(row):
             out_fields = []
@@ -735,13 +735,13 @@ async def verify_load_type(
         if db_manager.table_exists(connection, table_name):
             cursor = connection.cursor()
             try:
-                query = f"SELECT DISTINCT [loadtype] FROM [{db_manager.data_schema}].[{table_name}] WHERE [loadtype] IS NOT NULL"
+                query = f"SELECT DISTINCT [ref_data_loadtype] FROM [{db_manager.data_schema}].[{table_name}] WHERE [ref_data_loadtype] IS NOT NULL"
                 cursor.execute(query)
                 for row in cursor.fetchall():
                     if row[0]:
                         existing_load_types.append(row[0].strip())
             except Exception:
-                pass  # Table might not have loadtype column yet
+                pass  # Table might not have ref_data_loadtype column yet
         
         result = {
             "table_name": table_name,
@@ -808,6 +808,65 @@ async def get_reference_data_config():
     except Exception as e:
         error_msg = f"Failed to retrieve Reference_Data_Cfg records: {str(e)}"
         await logger.log_error("reference_data_config_query", error_msg, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=error_msg)
+    finally:
+        if connection:
+            try:
+                connection.close()
+            except Exception:
+                pass
+
+@app.get("/tables")
+async def get_available_tables():
+    """Get list of available tables in the database"""
+    connection = None
+    try:
+        connection = db_manager.get_connection()
+        cursor = connection.cursor()
+        
+        # Query to get main tables that have complete sets (main, stage, backup)
+        query = f"""
+            WITH all_tables AS (
+                SELECT TABLE_NAME 
+                FROM [{db_manager.database}].INFORMATION_SCHEMA.TABLES 
+                WHERE TABLE_TYPE = 'BASE TABLE'
+            ),
+            main_tables AS (
+                SELECT TABLE_NAME as main_table
+                FROM all_tables 
+                WHERE TABLE_NAME NOT LIKE '%_stage' 
+                AND TABLE_NAME NOT LIKE '%_backup'
+                AND TABLE_NAME NOT IN ('Reference_Data_Cfg', 'system_log')
+            )
+            SELECT m.main_table
+            FROM main_tables m
+            WHERE EXISTS (
+                SELECT 1 FROM all_tables WHERE TABLE_NAME = m.main_table + '_stage'
+            )
+            AND EXISTS (
+                SELECT 1 FROM all_tables WHERE TABLE_NAME = m.main_table + '_backup'  
+            )
+            ORDER BY m.main_table
+        """
+        cursor.execute(query)
+        
+        # Extract main table names from results
+        tables = [row[0] for row in cursor.fetchall()]
+        
+        await logger.log_info("tables_query", f"Retrieved {len(tables)} available tables")
+        
+        return JSONResponse(
+            content={"tables": tables, "count": len(tables)},
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
+        
+    except Exception as e:
+        error_msg = f"Failed to retrieve available tables: {str(e)}"
+        await logger.log_error("tables_query", error_msg, traceback.format_exc())
         raise HTTPException(status_code=500, detail=error_msg)
     finally:
         if connection:

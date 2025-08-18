@@ -679,8 +679,8 @@ class DataIngester:
 
             # Prepare column list and SQL statement once
             data_columns = [col for col in df.columns]
-            # Insert explicit static ref_data_loadtime plus loadtype
-            insert_columns = data_columns + ['ref_data_loadtime', 'loadtype']
+            # Insert explicit static ref_data_loadtime plus ref_data_loadtype
+            insert_columns = data_columns + ['ref_data_loadtime', 'ref_data_loadtype']
             column_list = ', '.join([f'[{col}]' for col in insert_columns])
             # Trailer removal is now handled before this function is called
             
@@ -728,7 +728,7 @@ class DataIngester:
                 
                 # Use parameterized queries with multi-row VALUES to prevent SQL injection
                 # Create placeholders for all rows in this batch: (?,?,...), (?,?,...), (?,?,...)...
-                # Include placeholders for data columns + loadtype (ref_data_loadtime uses DEFAULT)
+                # Include placeholders for data columns + ref_data_loadtype (ref_data_loadtime uses DEFAULT)
                 single_row_placeholders = '(' + ', '.join(['?' for _ in insert_columns]) + ')'
                 all_rows_placeholders = ', '.join([single_row_placeholders for _ in range(batch_size)])
                 sql = f"INSERT INTO [{schema}].[{table_name}] ({column_list}) VALUES {all_rows_placeholders}"
@@ -737,7 +737,7 @@ class DataIngester:
                 batch_params = []
                 for _, row in slice_df.iterrows():
                     row_values = [prepare_value(row[c], c) for c in data_columns]
-                    # Append static ref_data_loadtime then loadtype
+                    # Append static ref_data_loadtime then ref_data_loadtype
                     row_values.append(static_load_timestamp if static_load_timestamp else datetime.utcnow())
                     row_values.append(load_type)
                     batch_params.extend(row_values)  # Flatten into single list
@@ -762,7 +762,7 @@ class DataIngester:
                         for col in data_columns:
                             value = prepare_value(row[col], col)
                             row_values.append(value)
-                        # Append static load timestamp then loadtype
+                        # Append static load timestamp then ref_data_loadtype
                         row_values.append(static_load_timestamp if static_load_timestamp else datetime.utcnow())
                         row_values.append(load_type)
                         cursor.execute(single_sql, row_values)
