@@ -46,7 +46,8 @@ class DataIngester:
         load_mode: str, 
         filename: str,
         override_load_type: str = None,
-        config_reference_data: bool = False
+        config_reference_data: bool = False,
+        target_schema: str = None
     ) -> AsyncGenerator[str, None]:
         """Main ingestion function.
         Simplified: always reads full file then performs multi-row INSERT batching (≤990 rows per statement).
@@ -72,6 +73,14 @@ class DataIngester:
             yield "Connecting to database..."
             t_connect_start = time.perf_counter()
             connection = self.db_manager.get_connection()
+            
+            # Use target schema or default to configured data schema
+            if target_schema:
+                # Temporarily override the data_schema for this ingestion
+                original_data_schema = self.db_manager.data_schema
+                self.db_manager.data_schema = target_schema
+                yield f"Using target schema: {target_schema}"
+            
             self.db_manager.ensure_schemas_exist(connection)
             yield f"Database connection established (took {(time.perf_counter()-t_connect_start):.2f}s)"
 
@@ -470,6 +479,9 @@ class DataIngester:
             )
             prog.mark_error(progress_key, error_msg)
         finally:
+            # Restore original schema if it was overridden
+            if target_schema and 'original_data_schema' in locals():
+                self.db_manager.data_schema = original_data_schema
             if connection:
                 connection.close()
     

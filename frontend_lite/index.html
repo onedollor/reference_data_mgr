@@ -729,6 +729,7 @@
                             </div>
                         </div>
 
+
                         <!-- Table Selection Section -->
                         <template x-if="selectedFile">
                             <div class="mb-6">
@@ -750,7 +751,8 @@
                                             <input 
                                                 type="radio" 
                                                 x-model="tableOption" 
-                                                value="new" 
+                                                value="new"
+                                                @change="if (tableOption === 'new') validateTableName()"
                                                 class="mr-2 text-td-green focus:ring-td-green"
                                             />
                                             <span class="text-sm font-medium text-gray-700">Create New Table</span>
@@ -786,7 +788,7 @@
                                         >
                                             <option value="" x-text="schemaMatchedTablesCount > 0 ? `Choose from ${schemaMatchedTablesCount} schema-matched table${schemaMatchedTablesCount > 1 ? 's' : ''}...` : 'No tables match your file schema...'"></option>
                                             <template x-for="table in availableTables">
-                                                <option :value="table" x-text="table"></option>
+                                                <option :value="typeof table === 'string' ? table : table.full_name" x-text="typeof table === 'string' ? table : table.full_name"></option>
                                             </template>
                                         </select>
                                     </div>
@@ -795,15 +797,38 @@
                                 <!-- New Table Creation -->
                                 <template x-if="tableOption === 'new'">
                                     <div class="mb-4">
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">New Table Name</label>
-                                        <input 
-                                            type="text" 
-                                            x-model="newTableName"
-                                            @input="validateTableName"
-                                            :placeholder="suggestedTableName"
-                                            :class="tableNameError ? 'w-full p-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-red-50' : 'w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-td-green focus:border-transparent'"
-                                            :disabled="disabled"
-                                        />
+                                        <div class="flex flex-col md:flex-row gap-4">
+                                            <!-- Target Schema -->
+                                            <div class="md:w-40">
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">Target Schema</label>
+                                                <select 
+                                                    x-model="selectedSchema"
+                                                    @change="validateTableName()"
+                                                    class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-td-green focus:border-transparent"
+                                                    :disabled="disabled || availableSchemas.length === 0"
+                                                >
+                                                    <template x-for="schema in availableSchemas" :key="schema">
+                                                        <option :value="schema" x-text="schema"></option>
+                                                    </template>
+                                                </select>
+                                                <div class="mt-1 text-xs text-gray-500">
+                                                    <span x-text="availableSchemas.length === 0 ? 'Loading...' : `${availableSchemas.length} schema${availableSchemas.length !== 1 ? 's' : ''} available`"></span>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- New Table Name -->
+                                            <div class="flex-1">
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">New Table Name</label>
+                                                <input 
+                                                    type="text" 
+                                                    x-model="newTableName"
+                                                    @input="validateTableName"
+                                                    :placeholder="suggestedTableName"
+                                                    :class="tableNameError ? 'w-full p-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-red-50' : 'w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-td-green focus:border-transparent'"
+                                                    :disabled="disabled"
+                                                />
+                                            </div>
+                                        </div>
                                         <template x-if="tableNameError">
                                             <div class="mt-1 text-sm text-red-600 flex items-center">
                                                 <span class="material-icons text-red-500 mr-1" style="font-size: 16px;">error</span>
@@ -1624,6 +1649,10 @@
                 configReferenceData: false,
                 tableNameError: '',
                 
+                // Schema selection state
+                availableSchemas: [],
+                selectedSchema: 'ref', // Default to 'ref' schema
+                
                 // Format configuration
                 formatConfig: {
                     header_delimiter: '|',
@@ -1689,6 +1718,7 @@
                     await this.checkDatabaseConnection();
                     if (this.systemStatus === 'healthy') {
                         await this.loadConfiguration();
+                        await this.fetchAvailableSchemas(); // Load available schemas
                     }
                     this.startLogPolling();
                     this.startHealthPolling(); // Start periodic health checks
@@ -1832,6 +1862,8 @@
                     
                     this.suggestedTableName = tableName;
                     this.newTableName = tableName; // Auto-populate the input
+                    
+                    // Note: Validation will happen after tables are loaded in fetchAllTables()
                 },
                 
                 async fetchAvailableTables() {
@@ -1878,14 +1910,17 @@
                     }
                     
                     const tableName = this.newTableName.trim().toLowerCase();
+                    const targetSchema = this.selectedSchema || 'ref';
                     
-                    // Check if table name conflicts with existing tables
-                    const existingTable = this.allTables.find(table => 
-                        table.toLowerCase() === tableName
+                    // Check if table name conflicts with existing tables in the target schema
+                    const existingTable = this.allTables.find(tableInfo => 
+                        tableInfo.schema && tableInfo.table &&
+                        tableInfo.schema.toLowerCase() === targetSchema.toLowerCase() &&
+                        tableInfo.table.toLowerCase() === tableName
                     );
                     
                     if (existingTable) {
-                        this.tableNameError = `Table name "${this.newTableName}" already exists. Please choose a different name.`;
+                        this.tableNameError = `Table "${this.newTableName}" already exists in schema "${targetSchema}". Please choose a different name.`;
                         return false;
                     }
                     
@@ -1894,6 +1929,7 @@
                 
                 async fetchSchemaMatchedTables(columns) {
                     try {
+                        console.log('Fetching schema-matched tables for columns:', columns);
                         const response = await fetch(`${API_BASE_URL}/tables/schema-match`, {
                             method: 'POST',
                             headers: {
@@ -1904,8 +1940,11 @@
                         
                         if (response.ok) {
                             const data = await response.json();
+                            console.log('Schema-match API response:', data);
                             this.availableTables = data.tables || [];
                             this.schemaMatchedTablesCount = data.count || 0;
+                            console.log('Available tables:', this.availableTables);
+                            console.log('Schema matched count:', this.schemaMatchedTablesCount);
                             
                             // Set "Use Existing Table" as default when there are matched tables
                             if (this.schemaMatchedTablesCount > 0) {
@@ -1914,18 +1953,63 @@
                                 this.tableNameError = '';
                             } else {
                                 this.tableOption = 'new';
+                                // Trigger validation when switching to new table mode
+                                this.validateTableName();
                             }
                         } else {
-                            console.error('Failed to fetch schema-matched tables');
+                            console.error('Failed to fetch schema-matched tables. Status:', response.status);
+                            const errorText = await response.text();
+                            console.error('Error response:', errorText);
                             this.availableTables = [];
                             this.schemaMatchedTablesCount = 0;
                             this.tableOption = 'new';
+                            // Trigger validation when switching to new table mode
+                            this.validateTableName();
                         }
                     } catch (error) {
                         console.error('Error fetching schema-matched tables:', error);
                         this.availableTables = [];
                         this.schemaMatchedTablesCount = 0;
                         this.tableOption = 'new';
+                        // Trigger validation when switching to new table mode
+                        this.validateTableName();
+                    }
+                },
+                
+                async fetchAvailableSchemas() {
+                    try {
+                        const response = await fetch(`${API_BASE_URL}/schemas`);
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.availableSchemas = data.schemas || [];
+                            
+                            // Force set default schema - prefer 'ref' or the API's default_schema
+                            const preferredDefault = data.default_schema || 'ref';
+                            if (this.availableSchemas.includes(preferredDefault)) {
+                                this.selectedSchema = preferredDefault;
+                            } else if (this.availableSchemas.includes('ref')) {
+                                this.selectedSchema = 'ref';
+                            } else if (this.availableSchemas.length > 0) {
+                                this.selectedSchema = this.availableSchemas[0];
+                            }
+                            
+                            // Force update to trigger Alpine.js reactivity
+                            this.$nextTick(() => {
+                                // Trigger validation after schema is properly set
+                                this.validateTableName();
+                            });
+                        } else {
+                            console.error('Failed to fetch available schemas');
+                            // Fallback to default schema
+                            this.availableSchemas = ['ref'];
+                            this.selectedSchema = 'ref';
+                        }
+                    } catch (error) {
+                        console.error('Error fetching available schemas:', error);
+                        // Fallback to default schema
+                        this.availableSchemas = ['ref'];
+                        this.selectedSchema = 'ref';
                     }
                 },
                 
@@ -2033,6 +2117,11 @@
                     
                     if (overrideLoadType) {
                         formData.append('override_load_type', overrideLoadType);
+                    }
+                    
+                    // Add target schema for new table creation
+                    if (this.tableOption === 'new' && this.selectedSchema) {
+                        formData.append('target_schema', this.selectedSchema);
                     }
                     
                     // Add reference data configuration flag

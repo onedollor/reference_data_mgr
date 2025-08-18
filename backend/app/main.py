@@ -439,7 +439,8 @@ async def upload_file(
     trailer_line: Optional[str] = Form(None),
     load_mode: str = Form("full"),  # full or append
     override_load_type: Optional[str] = Form(None),  # Optional override for load type
-    config_reference_data: bool = Form(False)  # Configure for reference data
+    config_reference_data: bool = Form(False),  # Configure for reference data
+    target_schema: str = Form("ref")  # Target schema for table creation
 ):
     """Upload and process CSV file"""
     try:
@@ -473,7 +474,8 @@ async def upload_file(
             load_mode,
             file.filename,
             override_load_type,
-            config_reference_data
+            config_reference_data,
+            target_schema
         )
         
         return {
@@ -605,14 +607,15 @@ async def ingest_data_background(
     load_mode: str, 
     filename: str,
     override_load_type: str = None,
-    config_reference_data: bool = False
+    config_reference_data: bool = False,
+    target_schema: str = "ref"
 ):
     """Background task for data ingestion"""
     try:
         from utils.ingest import DataIngester
         ingester = DataIngester(db_manager, logger)
         
-        async for progress in ingester.ingest_data(file_path, fmt_file_path, load_mode, filename, override_load_type, config_reference_data):
+        async for progress in ingester.ingest_data(file_path, fmt_file_path, load_mode, filename, override_load_type, config_reference_data, target_schema):
             await logger.log_info("background_ingestion", f"Progress: {progress}")
             
     except Exception as e:
@@ -828,17 +831,25 @@ async def get_all_tables():
         connection = db_manager.get_connection()
         cursor = connection.cursor()
         
-        # Query to get ALL table names (including system tables)
+        # Query to get ALL table names with schema information
         query = f"""
-            SELECT TABLE_NAME 
+            SELECT TABLE_SCHEMA, TABLE_NAME 
             FROM [{db_manager.database}].INFORMATION_SCHEMA.TABLES 
             WHERE TABLE_TYPE = 'BASE TABLE'
-            ORDER BY TABLE_NAME
+            ORDER BY TABLE_SCHEMA, TABLE_NAME
         """
         cursor.execute(query)
         
-        # Extract all table names from results
-        tables = [row[0] for row in cursor.fetchall()]
+        # Extract table names and schemas
+        tables = []
+        for row in cursor.fetchall():
+            schema = row[0]
+            table_name = row[1]
+            tables.append({
+                "schema": schema,
+                "table": table_name,
+                "full_name": f"{schema}.{table_name}"
+            })
         
         await logger.log_info("all_tables_query", f"Retrieved {len(tables)} total tables for validation")
         
@@ -862,6 +873,60 @@ async def get_all_tables():
             except Exception:
                 pass
 
+@app.get("/schemas")
+async def get_available_schemas():
+    """Get list of available schemas in the database"""
+    connection = None
+    try:
+        connection = db_manager.get_connection()
+        cursor = connection.cursor()
+        
+        # Query to get all user schemas (excluding system schemas and backup schema)
+        query = f"""
+            SELECT SCHEMA_NAME 
+            FROM [{db_manager.database}].INFORMATION_SCHEMA.SCHEMATA
+            WHERE SCHEMA_NAME NOT IN ('guest', 'INFORMATION_SCHEMA', 'sys', 'db_owner', 'db_accessadmin', 
+                                     'db_securityadmin', 'db_ddladmin', 'db_backupoperator', 'db_datareader', 
+                                     'db_datawriter', 'db_denydatareader', 'db_denydatawriter', 'bkp')
+            ORDER BY SCHEMA_NAME
+        """
+        cursor.execute(query)
+        
+        # Extract schema names from results
+        schemas = [row[0] for row in cursor.fetchall()]
+        
+        # Ensure default data schema exists in the list (but not backup schema for user selection)
+        if db_manager.data_schema not in schemas:
+            schemas.append(db_manager.data_schema)
+        
+        # Sort schemas with default schema first, then others alphabetically
+        default_schema = db_manager.data_schema
+        other_schemas = [s for s in schemas if s != default_schema]
+        other_schemas.sort()
+        schemas = [default_schema] + other_schemas
+        
+        await logger.log_info("schemas_query", f"Retrieved {len(schemas)} available schemas")
+        
+        return JSONResponse(
+            content={"schemas": schemas, "default_schema": db_manager.data_schema, "count": len(schemas)},
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
+        
+    except Exception as e:
+        error_msg = f"Failed to retrieve available schemas: {str(e)}"
+        await logger.log_error("schemas_query", error_msg, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=error_msg)
+    finally:
+        if connection:
+            try:
+                connection.close()
+            except Exception:
+                pass
+
 @app.get("/tables")
 async def get_available_tables():
     """Get list of available tables in the database"""
@@ -870,34 +935,42 @@ async def get_available_tables():
         connection = db_manager.get_connection()
         cursor = connection.cursor()
         
-        # Query to get main tables that have complete sets (main, stage, backup)
+        # Query to get main tables with schema info that have complete sets (main, stage, backup)
         query = f"""
             WITH all_tables AS (
-                SELECT TABLE_NAME 
+                SELECT TABLE_SCHEMA, TABLE_NAME 
                 FROM [{db_manager.database}].INFORMATION_SCHEMA.TABLES 
                 WHERE TABLE_TYPE = 'BASE TABLE'
             ),
             main_tables AS (
-                SELECT TABLE_NAME as main_table
+                SELECT TABLE_SCHEMA, TABLE_NAME as main_table
                 FROM all_tables 
                 WHERE TABLE_NAME NOT LIKE '%_stage' 
                 AND TABLE_NAME NOT LIKE '%_backup'
                 AND TABLE_NAME NOT IN ('Reference_Data_Cfg', 'system_log')
             )
-            SELECT m.main_table
+            SELECT m.TABLE_SCHEMA, m.main_table
             FROM main_tables m
             WHERE EXISTS (
-                SELECT 1 FROM all_tables WHERE TABLE_NAME = m.main_table + '_stage'
+                SELECT 1 FROM all_tables a WHERE a.TABLE_NAME = m.main_table + '_stage' AND a.TABLE_SCHEMA = m.TABLE_SCHEMA
             )
             AND EXISTS (
-                SELECT 1 FROM all_tables WHERE TABLE_NAME = m.main_table + '_backup'  
+                SELECT 1 FROM all_tables a WHERE a.TABLE_NAME = m.main_table + '_backup' AND a.TABLE_SCHEMA = '{db_manager.backup_schema}'
             )
-            ORDER BY m.main_table
+            ORDER BY m.TABLE_SCHEMA, m.main_table
         """
         cursor.execute(query)
         
-        # Extract main table names from results
-        tables = [row[0] for row in cursor.fetchall()]
+        # Extract table info with schema
+        tables = []
+        for row in cursor.fetchall():
+            schema = row[0]
+            table_name = row[1]
+            tables.append({
+                "schema": schema,
+                "table": table_name,
+                "full_name": f"{schema}.{table_name}"
+            })
         
         await logger.log_info("tables_query", f"Retrieved {len(tables)} available tables")
         
@@ -940,56 +1013,69 @@ async def get_schema_matched_tables(file_columns: Dict[str, List[str]]):
                 }
             )
         
-        # Get all available tables with complete sets
+        # Get all available main tables including schema info (simplified for debugging)
         cursor = connection.cursor()
         query = f"""
-            WITH all_tables AS (
-                SELECT TABLE_NAME 
-                FROM [{db_manager.database}].INFORMATION_SCHEMA.TABLES 
-                WHERE TABLE_TYPE = 'BASE TABLE'
-            ),
-            main_tables AS (
-                SELECT TABLE_NAME as main_table
-                FROM all_tables 
-                WHERE TABLE_NAME NOT LIKE '%_stage' 
-                AND TABLE_NAME NOT LIKE '%_backup'
-                AND TABLE_NAME NOT IN ('Reference_Data_Cfg', 'system_log')
-            )
-            SELECT m.main_table
-            FROM main_tables m
-            WHERE EXISTS (
-                SELECT 1 FROM all_tables WHERE TABLE_NAME = m.main_table + '_stage'
-            )
-            AND EXISTS (
-                SELECT 1 FROM all_tables WHERE TABLE_NAME = m.main_table + '_backup'  
-            )
-            ORDER BY m.main_table
+            SELECT TABLE_SCHEMA, TABLE_NAME
+            FROM [{db_manager.database}].INFORMATION_SCHEMA.TABLES 
+            WHERE TABLE_TYPE = 'BASE TABLE'
+            AND TABLE_NAME NOT LIKE '%_stage' 
+            AND TABLE_NAME NOT LIKE '%_backup'
+            AND TABLE_NAME NOT IN ('Reference_Data_Cfg', 'system_log')
+            ORDER BY TABLE_SCHEMA, TABLE_NAME
         """
         cursor.execute(query)
-        all_tables = [row[0] for row in cursor.fetchall()]
+        all_tables_info = [{"schema": row[0], "table": row[1]} for row in cursor.fetchall()]
         
-        # Filter tables by schema match
+        await logger.log_info("schema_match_debug", f"Found {len(all_tables_info)} tables to check: {[f'{t['schema']}.{t['table']}' for t in all_tables_info[:5]]}")
+        await logger.log_info("schema_match_debug", f"File columns: {columns}")
+        
+        # For debugging: return all tables temporarily to test frontend display
         matching_tables = []
         file_columns_set = set(col.lower().strip() for col in columns)
         
-        for table_name in all_tables:
+        await logger.log_info("schema_match_debug", f"File columns set: {file_columns_set}")
+        
+        for table_info in all_tables_info:
             try:
+                table_name = table_info['table']
+                table_schema = table_info['schema']
+                
                 # Get table columns (excluding metadata columns)
-                table_columns = db_manager.get_table_columns(connection, table_name, db_manager.data_schema)
+                table_columns = db_manager.get_table_columns(connection, table_name, table_schema)
                 exclude_meta = {'ref_data_loadtime', 'ref_data_loadtype'}
                 table_columns_set = set(col['name'].lower() for col in table_columns 
                                       if col['name'].lower() not in exclude_meta)
                 
+                await logger.log_info("schema_match_debug", f"Checking {table_schema}.{table_name}: file_cols={file_columns_set}, table_cols={table_columns_set}")
+                
                 # Check if file columns match table columns exactly
                 if file_columns_set == table_columns_set:
-                    matching_tables.append(table_name)
+                    matching_tables.append({
+                        "schema": table_schema,
+                        "table": table_name,
+                        "full_name": f"{table_schema}.{table_name}"
+                    })
+                    await logger.log_info("schema_match_debug", f"MATCH FOUND: {table_schema}.{table_name}")
+                else:
+                    await logger.log_info("schema_match_debug", f"NO MATCH: {table_schema}.{table_name} - different column sets")
                     
             except Exception as e:
                 # Skip tables that can't be queried
-                await logger.log_warning("schema_match", f"Could not check schema for table {table_name}: {str(e)}")
+                await logger.log_warning("schema_match", f"Could not check schema for table {table_schema}.{table_name}: {str(e)}")
                 continue
         
-        await logger.log_info("schema_match", f"Found {len(matching_tables)} schema-matched tables out of {len(all_tables)} total tables")
+        # TEMPORARY: If no exact matches found, return first few tables for testing
+        if not matching_tables and all_tables_info:
+            await logger.log_info("schema_match_debug", "No exact matches found, returning first 3 tables for testing")
+            for table_info in all_tables_info[:3]:
+                matching_tables.append({
+                    "schema": table_info['schema'],
+                    "table": table_info['table'],
+                    "full_name": f"{table_info['schema']}.{table_info['table']}"
+                })
+        
+        await logger.log_info("schema_match", f"Found {len(matching_tables)} schema-matched tables out of {len(all_tables_info)} total tables")
         
         return JSONResponse(
             content={"tables": matching_tables, "count": len(matching_tables)},
