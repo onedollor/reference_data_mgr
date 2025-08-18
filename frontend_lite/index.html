@@ -840,7 +840,7 @@
                         <!-- Upload Button -->
                         <button 
                             @click="handleUpload"
-                            :disabled="!selectedFile || disabled || isUploading || (tableOption === 'new' && (tableNameError || !newTableName.trim()))"
+                            :disabled="!selectedFile || disabled || isUploading || (tableOption === 'new' && (tableNameError || !newTableName.trim())) || (tableOption === 'existing' && !selectedTable)"
                             class="inline-flex items-center px-6 py-3 bg-td-green text-white rounded-lg hover:bg-td-green-dark transition-colors font-semibold shadow-td-button hover:shadow-td-button-hover disabled:opacity-50 disabled:cursor-not-allowed text-base"
                         >
                             <span class="material-icons mr-2" x-text="isUploading ? 'sync' : 'cloud_upload'" :class="isUploading ? 'animate-spin' : ''"></span>
