@@ -209,6 +209,8 @@ class DatabaseManager:
                 COLUMN_NAME,
                 DATA_TYPE,
                 CHARACTER_MAXIMUM_LENGTH,
+                NUMERIC_PRECISION,
+                NUMERIC_SCALE,
                 IS_NULLABLE,
                 COLUMN_DEFAULT,
                 ORDINAL_POSITION
@@ -223,6 +225,8 @@ class DatabaseManager:
                 'name': row.COLUMN_NAME,
                 'data_type': row.DATA_TYPE,
                 'max_length': row.CHARACTER_MAXIMUM_LENGTH,
+                'numeric_precision': row.NUMERIC_PRECISION,
+                'numeric_scale': row.NUMERIC_SCALE,
                 'nullable': row.IS_NULLABLE == 'YES',
                 'default': row.COLUMN_DEFAULT,
                 'position': row.ORDINAL_POSITION
@@ -262,6 +266,32 @@ class DatabaseManager:
         
         cursor.execute(create_sql)
     
+    def drop_table_if_exists(self, connection: pyodbc.Connection, table_name: str, schema: str = None) -> bool:
+        """Drop table if it exists. Returns True if table was dropped, False if it didn't exist."""
+        if schema is None:
+            schema = self.data_schema
+            
+        cursor = connection.cursor()
+        
+        # Check if table exists
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM INFORMATION_SCHEMA.TABLES 
+            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+        """, schema, table_name)
+        
+        table_exists = cursor.fetchone()[0] > 0
+        
+        if table_exists:
+            # Drop the table
+            drop_sql = f"DROP TABLE [{schema}].[{table_name}]"
+            cursor.execute(drop_sql)
+            print(f"INFO: Dropped table [{schema}].[{table_name}]")
+            return True
+        else:
+            print(f"INFO: Table [{schema}].[{table_name}] does not exist, no drop needed")
+            return False
+    
     def create_backup_table(self, connection: pyodbc.Connection, table_name: str, columns: List[Dict[str, str]]) -> None:
         """Create a backup table with version tracking, validating schema compatibility"""
         backup_table_name = f"{table_name}_backup"
@@ -277,27 +307,42 @@ class DatabaseManager:
         backup_exists = cursor.fetchone()[0] > 0
         
         if backup_exists:
-            # Validate schema compatibility
+            # Validate schema compatibility and sync if needed
             if self._backup_schema_matches(connection, backup_table_name, columns):
                 # Schema matches, backup table is compatible
+                print(f"INFO: Backup table schema is compatible")
                 return
             else:
-                # Schema doesn't match, rename existing backup table and create new one
-                timestamp_suffix = self._get_timestamp_suffix()
-                old_backup_name = f"{backup_table_name}_{timestamp_suffix}"
+                # Schema doesn't match, attempt to sync backup table schema
+                print(f"INFO: Backup table schema mismatch detected for {backup_table_name}")
+                sync_result = self._sync_backup_table_schema(connection, backup_table_name, columns)
                 
-                # Rename existing backup table
-                rename_sql = (
-                    "EXEC sp_rename '[" + self.backup_schema + "].[" + backup_table_name + "]', '" + old_backup_name + "'"
-                )
-                cursor.execute(rename_sql)
-                print(f"INFO: Renamed incompatible backup table {backup_table_name} to {old_backup_name}")
+                if sync_result['success']:
+                    print(f"INFO: Successfully synced backup table schema: {sync_result['summary']}")
+                    return
+                else:
+                    # If sync fails, fallback to rename and recreate as last resort
+                    print(f"WARNING: Could not sync backup table schema: {sync_result['error']}")
+                    print(f"INFO: Falling back to rename and recreate strategy as last resort")
+                    
+                    timestamp_suffix = self._get_timestamp_suffix()
+                    old_backup_name = f"{backup_table_name}_{timestamp_suffix}"
+                    
+                    # Rename existing backup table to preserve historical data
+                    rename_sql = (
+                        "EXEC sp_rename '[" + self.backup_schema + "].[" + backup_table_name + "]', '" + old_backup_name + "'"
+                    )
+                    cursor.execute(rename_sql)
+                    print(f"INFO: Preserved historical backup data by renaming to {old_backup_name}")
         
         # Build column definitions (same as main table)
         column_defs = []
         for col in columns:
-            col_def = f"[{col['name']}] {col['data_type']}"
+            # Use normalized data type to include proper length specifications
+            normalized_type = self._normalize_data_type(col['data_type'], col.get('max_length'), col.get('numeric_precision'), col.get('numeric_scale'))
+            col_def = f"[{col['name']}] {normalized_type}"
             column_defs.append(col_def)
+            print(f"DEBUG: Backup table column: {col['name']} -> {normalized_type}")
         
         # Add backup-specific columns
         column_defs.extend([
@@ -314,8 +359,10 @@ class DatabaseManager:
         cursor.execute(create_sql)
     
     def _backup_schema_matches(self, connection: pyodbc.Connection, backup_table_name: str, expected_columns: List[Dict[str, str]]) -> bool:
-        """Check if existing backup table schema matches expected columns"""
+        """Check if existing backup table schema matches expected columns including data types"""
         try:
+            print(f"DEBUG: Validating backup table schema for {backup_table_name}")
+            
             # Get existing backup table columns (excluding metadata columns)
             existing_columns = self.get_table_columns(connection, backup_table_name, self.backup_schema)
             
@@ -323,28 +370,211 @@ class DatabaseManager:
             data_columns = [col for col in existing_columns 
                            if col['name'] not in ['ref_data_loadtime', 'ref_data_loadtype', 'ref_data_version_id']]
             
+            print(f"DEBUG: Found {len(data_columns)} data columns in existing backup table")
+            print(f"DEBUG: Expected {len(expected_columns)} columns from main table")
+            
             # Create comparison sets (normalize data types)
             expected_set = set()
             for col in expected_columns:
                 col_name = col['name'].lower()
-                col_type = self._normalize_data_type(col['data_type'])
+                col_type = self._normalize_data_type(col['data_type'], col.get('max_length'), col.get('numeric_precision'), col.get('numeric_scale'))
                 expected_set.add((col_name, col_type))
+                print(f"DEBUG: Expected column: {col_name} -> {col_type}")
             
             existing_set = set()
             for col in data_columns:
                 col_name = col['name'].lower()
-                col_type = self._normalize_data_type(col['data_type'], col.get('max_length'))
+                col_type = self._normalize_data_type(col['data_type'], col.get('max_length'), col.get('numeric_precision'), col.get('numeric_scale'))
                 existing_set.add((col_name, col_type))
+                print(f"DEBUG: Existing column: {col_name} -> {col_type}")
             
-            return expected_set == existing_set
+            # Check for differences
+            missing_in_backup = expected_set - existing_set
+            extra_in_backup = existing_set - expected_set
+            
+            if missing_in_backup:
+                print(f"DEBUG: Missing columns in backup table: {missing_in_backup}")
+            if extra_in_backup:
+                print(f"DEBUG: Extra columns in backup table: {extra_in_backup}")
+            
+            schema_matches = expected_set == existing_set
+            print(f"DEBUG: Backup table schema matches: {schema_matches}")
+            
+            return schema_matches
             
         except Exception as e:
             # If we can't validate schema, assume it doesn't match to be safe
             print(f"WARNING: Could not validate backup table schema: {str(e)}")
             return False
     
-    def _normalize_data_type(self, data_type: str, max_length: int = None) -> str:
-        """Normalize data type for comparison (handle varchar length variations)"""
+    def _sync_backup_table_schema(self, connection: pyodbc.Connection, backup_table_name: str, expected_columns: List[Dict[str, str]]) -> dict:
+        """Attempt to sync backup table schema with expected columns by adding/modifying columns including data types"""
+        print(f"DEBUG: Starting backup table schema sync for {backup_table_name}")
+        try:
+            cursor = connection.cursor()
+            
+            # Get existing backup table columns
+            existing_columns = self.get_table_columns(connection, backup_table_name, self.backup_schema)
+            
+            # Filter out backup-specific metadata columns for comparison
+            data_columns = {col['name'].lower(): col for col in existing_columns 
+                           if col['name'] not in ['ref_data_loadtime', 'ref_data_loadtype', 'ref_data_version_id']}
+            
+            # Track changes made
+            changes = {
+                'added': [],
+                'modified': [],
+                'errors': []
+            }
+            
+            # Process each expected column
+            for expected_col in expected_columns:
+                col_name = expected_col['name']
+                col_name_lower = col_name.lower()
+                expected_type = expected_col['data_type']
+                
+                if col_name_lower not in data_columns:
+                    # Column doesn't exist, add it
+                    try:
+                        expected_type_norm = self._normalize_data_type(expected_col['data_type'], expected_col.get('max_length'), expected_col.get('numeric_precision'), expected_col.get('numeric_scale'))
+                        alter_sql = f"ALTER TABLE [{self.backup_schema}].[{backup_table_name}] ADD [{col_name}] {expected_type_norm}"
+                        cursor.execute(alter_sql)
+                        changes['added'].append({'column': col_name, 'type': expected_type_norm})
+                        print(f"INFO: Added column [{col_name}] {expected_type_norm} to backup table")
+                    except Exception as e:
+                        error_msg = f"Failed to add column {col_name}: {str(e)}"
+                        changes['errors'].append(error_msg)
+                        print(f"WARNING: {error_msg}")
+                else:
+                    # Column exists, check if type needs modification
+                    existing_col = data_columns[col_name_lower]
+                    existing_type = self._normalize_data_type(existing_col['data_type'], existing_col.get('max_length'), existing_col.get('numeric_precision'), existing_col.get('numeric_scale'))
+                    expected_type_norm = self._normalize_data_type(expected_col['data_type'], expected_col.get('max_length'), expected_col.get('numeric_precision'), expected_col.get('numeric_scale'))
+                    
+                    if existing_type != expected_type_norm:
+                        # Check if this is a safe modification (e.g., widening varchar)
+                        if self._is_safe_column_modification(existing_col, expected_col):
+                            try:
+                                alter_sql = f"ALTER TABLE [{self.backup_schema}].[{backup_table_name}] ALTER COLUMN [{col_name}] {expected_type_norm}"
+                                cursor.execute(alter_sql)
+                                changes['modified'].append({
+                                    'column': col_name, 
+                                    'from': existing_type, 
+                                    'to': expected_type_norm
+                                })
+                                print(f"INFO: Modified column [{col_name}] from {existing_type} to {expected_type_norm}")
+                            except Exception as e:
+                                error_msg = f"Failed to modify column {col_name}: {str(e)}"
+                                changes['errors'].append(error_msg)
+                                print(f"WARNING: {error_msg}")
+                        else:
+                            # Unsafe modifications should cause sync to fail, triggering recreation
+                            error_msg = f"Incompatible type change for column {col_name}: {existing_type} -> {expected_type_norm}"
+                            changes['errors'].append(error_msg)
+                            print(f"ERROR: {error_msg} - this will trigger backup table recreation")
+            
+            # Check for extra columns in backup table that aren't in expected columns
+            expected_col_names = {col['name'].lower() for col in expected_columns}
+            extra_columns = [col_name for col_name in data_columns.keys() 
+                            if col_name not in expected_col_names]
+            
+            if extra_columns:
+                print(f"INFO: Backup table has extra columns that will be preserved: {extra_columns}")
+            
+            # Commit changes if no errors
+            if changes['errors']:
+                connection.rollback()
+                return {
+                    'success': False,
+                    'error': f"Schema sync failed with {len(changes['errors'])} errors: {changes['errors'][:3]}",
+                    'changes': changes
+                }
+            else:
+                connection.commit()
+                summary_parts = []
+                if changes['added']:
+                    summary_parts.append(f"added {len(changes['added'])} columns")
+                if changes['modified']:
+                    summary_parts.append(f"modified {len(changes['modified'])} columns")
+                
+                summary = ", ".join(summary_parts) if summary_parts else "no changes needed"
+                
+                return {
+                    'success': True,
+                    'summary': summary,
+                    'changes': changes
+                }
+                
+        except Exception as e:
+            connection.rollback()
+            return {
+                'success': False,
+                'error': f"Unexpected error during schema sync: {str(e)}",
+                'changes': {}
+            }
+    
+    def _is_safe_column_modification(self, existing_col: dict, expected_col: dict) -> bool:
+        """Check if a column modification is safe (e.g., widening varchar, compatible type changes)"""
+        # Use normalized types for comparison
+        existing_type = self._normalize_data_type(existing_col['data_type'], existing_col.get('max_length'), existing_col.get('numeric_precision'), existing_col.get('numeric_scale')).lower()
+        expected_type = self._normalize_data_type(expected_col['data_type'], expected_col.get('max_length'), expected_col.get('numeric_precision'), expected_col.get('numeric_scale')).lower()
+        
+        print(f"DEBUG: Checking safety of column modification: {existing_type} -> {expected_type}")
+        
+        # Extract base types
+        if 'varchar' in existing_type and 'varchar' in expected_type:
+            # Check if we're widening varchar
+            import re
+            existing_match = re.search(r'varchar\((\d+)\)', existing_type)
+            expected_match = re.search(r'varchar\((\d+)\)', expected_type)
+            
+            if existing_match and expected_match:
+                existing_length = int(existing_match.group(1))
+                expected_length = int(expected_match.group(1))
+                return expected_length >= existing_length
+            
+            # If one is varchar(max), that's generally safe
+            if 'max' in expected_type:
+                return True
+        
+        # Extract base types
+        existing_base = existing_type.split('(')[0]
+        expected_base = expected_type.split('(')[0]
+        
+        # Explicitly reject incompatible type changes
+        incompatible_changes = {
+            ('varchar', 'decimal'), ('varchar', 'numeric'), ('varchar', 'int'), ('varchar', 'bigint'),
+            ('decimal', 'varchar'), ('numeric', 'varchar'), ('int', 'varchar'), ('bigint', 'varchar'),
+            ('decimal', 'int'), ('int', 'decimal'), ('numeric', 'int'), ('int', 'numeric')
+        }
+        
+        # Check for explicitly incompatible changes
+        if (existing_base, expected_base) in incompatible_changes:
+            print(f"DEBUG: Rejecting incompatible type change: {existing_base} -> {expected_base}")
+            return False
+        
+        # Safe type conversions (same base type or compatible widening)
+        safe_conversions = {
+            'int': ['bigint'],
+            'smallint': ['int', 'bigint'],
+            'tinyint': ['smallint', 'int', 'bigint'],
+            'float': ['real'],
+            'datetime': ['datetime2'],
+            'char': ['varchar', 'nvarchar'],
+            'varchar': ['nvarchar']
+        }
+        
+        if existing_base == expected_base:
+            return True
+        
+        if existing_base in safe_conversions:
+            return expected_base in safe_conversions[existing_base]
+        
+        print(f"DEBUG: Rejecting unsafe type change: {existing_base} -> {expected_base}")
+        return False
+    
+    def _normalize_data_type(self, data_type: str, max_length: int = None, numeric_precision: int = None, numeric_scale: int = None) -> str:
+        """Normalize data type for comparison (handle varchar, decimal, and other type variations)"""
         data_type = data_type.lower().strip()
         
         # Handle varchar with lengths
@@ -362,6 +592,52 @@ class DatabaseManager:
                 else:
                     return 'varchar(4000)'  # Default fallback
         
+        # Handle nvarchar with lengths
+        elif data_type.startswith('nvarchar'):
+            if max_length == -1:
+                return 'nvarchar(max)'
+            elif max_length is not None:
+                return f'nvarchar({max_length})'
+            else:
+                # Extract length from data_type string if present
+                import re
+                match = re.search(r'nvarchar\((\d+|max)\)', data_type, re.IGNORECASE)
+                if match:
+                    return f'nvarchar({match.group(1).lower()})'
+                else:
+                    return 'nvarchar(4000)'  # Default fallback
+        
+        # Handle decimal/numeric with precision and scale
+        elif data_type.startswith(('decimal', 'numeric')):
+            # Use provided precision and scale from INFORMATION_SCHEMA
+            if numeric_precision is not None and numeric_scale is not None:
+                return f'decimal({numeric_precision},{numeric_scale})'
+            else:
+                # Extract precision and scale from string if present
+                import re
+                match = re.search(r'(decimal|numeric)\((\d+),(\d+)\)', data_type, re.IGNORECASE)
+                if match:
+                    type_name = match.group(1).lower()
+                    precision = match.group(2)
+                    scale = match.group(3)
+                    return f'{type_name}({precision},{scale})'
+                else:
+                    # If no precision/scale specified, use default
+                    return 'decimal(18,0)'
+        
+        # Handle char with lengths  
+        elif data_type.startswith('char') and not data_type.startswith('varchar'):
+            if max_length is not None:
+                return f'char({max_length})'
+            else:
+                import re
+                match = re.search(r'char\((\d+)\)', data_type, re.IGNORECASE)
+                if match:
+                    return f'char({match.group(1)})'
+                else:
+                    return 'char(1)'  # Default fallback
+        
+        # For other types, return as-is (int, bigint, datetime, etc.)
         return data_type
     
     def _get_timestamp_suffix(self) -> str:
@@ -452,27 +728,67 @@ class DatabaseManager:
         """Backup existing data to backup table with version increment, filtering out trailer rows"""
         cursor = connection.cursor()
         
+        print(f"DEBUG: Starting backup - source_table: {source_table}, backup_table: {backup_table}")
         try:
             # Get the next version ID - use dynamic SQL with proper quoting
             version_sql = "SELECT COALESCE(MAX(ref_data_version_id), 0) + 1 FROM [" + self.backup_schema + "].[" + backup_table + "_backup]"
             cursor.execute(version_sql)
             next_version = cursor.fetchone()[0]
             
-            # Direct backup - use dynamic SQL with proper quoting
+            # Get column lists for explicit backup (avoid SELECT *)
+            source_columns = self.get_table_columns(connection, source_table, self.data_schema)
+            backup_columns = self.get_table_columns(connection, backup_table + "_backup", self.backup_schema)
+            
+            # Filter source columns to exclude metadata columns (backup table has different metadata structure)
+            source_data_columns = [col for col in source_columns if col['name'].lower() not in ['ref_data_loadtime', 'ref_data_loadtype']]
+            
+            # Build column lists for INSERT and SELECT
+            insert_columns = []
+            select_columns = []
+            
+            # Add matching data columns
+            for backup_col in backup_columns:
+                backup_col_name = backup_col['name']
+                backup_col_lower = backup_col_name.lower()
+                
+                # Skip backup-specific metadata columns for now
+                if backup_col_lower in ['ref_data_loadtime', 'ref_data_loadtype', 'ref_data_version_id']:
+                    continue
+                
+                # Find matching source column
+                matching_source_col = next((col for col in source_data_columns if col['name'].lower() == backup_col_lower), None)
+                if matching_source_col:
+                    insert_columns.append(f"[{backup_col_name}]")
+                    select_columns.append(f"[{matching_source_col['name']}]")
+            
+            # Add backup metadata columns
+            insert_columns.extend(["[ref_data_loadtime]", "[ref_data_loadtype]", "[ref_data_version_id]"])
+            select_columns.extend(["GETDATE()", "'backup'", "?"])
+            
+            # Build explicit column backup SQL
+            insert_column_list = ", ".join(insert_columns)
+            select_column_list = ", ".join(select_columns)
+            
             backup_sql = (
-                "INSERT INTO [" + self.backup_schema + "].[" + backup_table + "_backup] "
-                "SELECT *, ? FROM [" + self.data_schema + "].[" + source_table + "]"
+                f"INSERT INTO [{self.backup_schema}].[{backup_table}_backup] ({insert_column_list}) "
+                f"SELECT {select_column_list} FROM [{self.data_schema}].[{source_table}]"
             )
             cursor.execute(backup_sql, next_version)
             connection.commit()
-            return cursor.rowcount
+            backup_count = cursor.rowcount
+            print(f"DEBUG: Backup completed successfully - {backup_count} rows backed up to version {next_version}")
+            return backup_count
                     
         except Exception as e:
             connection.rollback()
-            # If backup fails due to schema mismatch, log warning and continue
+            # If backup fails due to schema issues, log warning and continue
             error_msg = str(e)
-            if "Column name or number" in error_msg and "does not match" in error_msg:
-                print(f"WARNING: Skipping backup for {source_table} due to schema mismatch: {error_msg}")
+            if ("Column name or number" in error_msg and "does not match" in error_msg) or \
+               ("String or binary data would be truncated" in error_msg) or \
+               ("42000" in error_msg and "truncated" in error_msg.lower()):
+                print(f"DEBUG: Backup skipped due to schema issue - source_table: {source_table}")
+                print(f"WARNING: Skipping backup for {source_table} due to schema compatibility issue: {error_msg}")
+                print(f"INFO: This typically occurs when backup table schema needs updating")
                 return 0  # Continue without backup
             else:
                 raise Exception(f"Failed to backup existing data from {source_table}: {str(e)}")
@@ -527,6 +843,113 @@ class DatabaseManager:
                 print(f"Added metadata column {meta_col['name']} to {schema}.{table_name}")
             else:
                 actions["skipped"].append({"column": meta_col["name"], "reason": "already exists"})
+        
+        return actions
+    
+    def sync_main_table_columns(self, connection: pyodbc.Connection, table_name: str, file_columns: List[Dict[str, str]], schema: str = None) -> Dict[str, Any]:
+        """Safely synchronize main table columns with input file columns.
+        ONLY ADDS missing columns - NEVER modifies existing column data types.
+        This preserves data integrity and existing table structure.
+        
+        Args:
+            connection: Database connection
+            table_name: Name of the main table
+            file_columns: List of columns from input file [{'name': ..., 'data_type': ...}]
+            schema: Table schema (defaults to data_schema)
+            
+        Returns:
+            Dict with 'added', 'skipped', 'mismatched' lists
+        """
+        if schema is None:
+            schema = self.data_schema
+            
+        cursor = connection.cursor()
+        
+        # Get existing table columns (excluding metadata columns for comparison)
+        existing_cols_list = self.get_table_columns(connection, table_name, schema)
+        existing_cols = {c['name'].lower(): c for c in existing_cols_list 
+                        if c['name'].lower() not in ['ref_data_loadtime', 'ref_data_loadtype']}
+        
+        actions = {
+            "added": [],           # Columns successfully added
+            "skipped": [],         # Columns that already exist (no change)
+            "mismatched": []       # Columns that exist but with different data types (no change)
+        }
+        
+        print(f"INFO: Synchronizing main table [{schema}].[{table_name}] columns with input file")
+        existing_cols_display = [f"{c['name']}({c['data_type']})" for c in existing_cols_list if c['name'].lower() not in ['ref_data_loadtime', 'ref_data_loadtype']]
+        file_cols_display = [f"{c['name']}({c['data_type']})" for c in file_columns]
+        print(f"INFO: Existing table columns: {existing_cols_display}")
+        print(f"INFO: Input file columns: {file_cols_display}")
+        
+        for file_col in file_columns:
+            col_name = file_col['name']
+            col_name_lower = col_name.lower()
+            file_data_type = file_col['data_type']
+            
+            if col_name_lower not in existing_cols:
+                # Column doesn't exist in table - ADD it
+                try:
+                    add_col_sql = f"ALTER TABLE [{schema}].[{table_name}] ADD [{col_name}] {file_data_type}"
+                    cursor.execute(add_col_sql)
+                    actions["added"].append({
+                        "column": col_name, 
+                        "data_type": file_data_type
+                    })
+                    print(f"INFO: Added column [{col_name}] {file_data_type} to main table")
+                except Exception as e:
+                    print(f"WARNING: Failed to add column [{col_name}]: {str(e)}")
+                    # Don't fail the entire process for one column addition failure
+                    continue
+            else:
+                # Column exists - check if types match
+                existing_col = existing_cols[col_name_lower]
+                existing_type = existing_col['data_type']
+                existing_max_length = existing_col.get('max_length')
+                
+                # Normalize types for comparison
+                existing_type_normalized = self._normalize_data_type(existing_type, existing_max_length)
+                file_type_normalized = self._normalize_data_type(file_data_type)
+                
+                if existing_type_normalized == file_type_normalized:
+                    # Types match - no action needed
+                    actions["skipped"].append({
+                        "column": col_name,
+                        "reason": "column exists with matching type",
+                        "existing_type": existing_type_normalized
+                    })
+                else:
+                    # Types don't match - PRESERVE existing type, don't modify
+                    actions["mismatched"].append({
+                        "column": col_name,
+                        "existing_type": existing_type_normalized,
+                        "file_type": file_type_normalized,
+                        "action": "preserved existing type (no modification)"
+                    })
+                    print(f"WARNING: Column [{col_name}] type mismatch - table has {existing_type_normalized}, file has {file_type_normalized}. Preserving table type.")
+        
+        # Check for extra columns in table that aren't in file
+        file_col_names = {col['name'].lower() for col in file_columns}
+        extra_table_cols = [col_name for col_name in existing_cols.keys() 
+                           if col_name not in file_col_names]
+        
+        if extra_table_cols:
+            print(f"INFO: Table has {len(extra_table_cols)} extra columns not in input file (preserved): {list(extra_table_cols)}")
+        
+        # Commit changes
+        connection.commit()
+        
+        # Summary reporting
+        summary_parts = []
+        if actions['added']:
+            summary_parts.append(f"added {len(actions['added'])} columns")
+        if actions['mismatched']:
+            summary_parts.append(f"preserved {len(actions['mismatched'])} mismatched columns")
+        if actions['skipped']:
+            summary_parts.append(f"skipped {len(actions['skipped'])} existing columns")
+        
+        summary = ", ".join(summary_parts) if summary_parts else "no changes needed"
+        print(f"INFO: Main table column sync completed: {summary}")
         
         return actions
 

@@ -229,34 +229,46 @@ class DataIngester:
             if table_exists or stage_exists:
                 yield "Existing tables found, validating schema..."
 
-            backup_exists = self.db_manager.table_exists(connection, table_base_name + '_backup')
-            if backup_exists:
-                yield "Backup table exists, validating schema..."
-            else:
-                yield "No backup table found, creating new backup..."
-                self.db_manager.create_backup_table(connection, table_name, columns)
-            
-            # Backup existing data BEFORE dropping table
-            if existing_rows > 0 and load_mode == "full":
-                yield "Backing up existing data before table recreation..."
-                # Ensure backup table has proper metadata columns
-                backup_table_name = f"{table_base_name}_backup"
-                if self.db_manager.table_exists(connection, backup_table_name, self.db_manager.backup_schema):
-                    backup_meta_actions = self.db_manager.ensure_backup_table_metadata_columns(connection, backup_table_name)
-                    if backup_meta_actions['added']:
-                        yield f"Added missing metadata columns to backup table: {[col['column'] for col in backup_meta_actions['added']]}"
-                
-                backup_rows = self.db_manager.backup_existing_data(connection, table_name, table_base_name)
-                yield f"Existing data backed up: {backup_rows} rows with version tracking"
 
             # Check for cancellation before main table operations
             if progress_key and prog.is_canceled(progress_key):
                 yield "Cancellation requested - stopping before main table operations"
                 raise Exception("Ingestion canceled by user")
 
-            # Main table handling
+            # Main table handling - preserve existing table in both modes
             if load_mode == "full":
-                self.db_manager.create_table(connection, table_name, columns, add_metadata_columns=True)
+                if not table_exists:
+                    yield "Full load mode: main table does not exist, creating new main table..."
+                    self.db_manager.create_table(connection, table_name, columns, add_metadata_columns=True)
+                else:
+                    yield "Full load mode: preserving existing main table structure"
+                    # Ensure metadata columns exist first
+                    try:
+                        meta_actions = self.db_manager.ensure_metadata_columns(connection, table_name)
+                        if meta_actions['added']:
+                            yield f"Added missing metadata columns to main table: {[col['column'] for col in meta_actions['added']]}"
+                    except Exception as e:
+                        yield f"WARNING: Failed to add metadata columns to main table: {e}"
+                    
+                    # Sync main table columns to add missing columns from file (never modify existing types)
+                    try:
+                        column_sync_actions = self.db_manager.sync_main_table_columns(connection, table_name, columns)
+                        if column_sync_actions['added']:
+                            yield f"Added {len(column_sync_actions['added'])} missing columns from input file: {[col['column'] for col in column_sync_actions['added']]}"
+                        if column_sync_actions['mismatched']:
+                            yield f"WARNING: {len(column_sync_actions['mismatched'])} columns have different types - preserved existing table types"
+                            for mismatch in column_sync_actions['mismatched']:
+                                yield f"  - Column '{mismatch['column']}': table={mismatch['existing_type']}, file={mismatch['file_type']}"
+                        if not column_sync_actions['added'] and not column_sync_actions['mismatched']:
+                            yield "Main table columns are compatible with input file"
+                    except Exception as _e:
+                        yield f"WARNING: Main table column sync failed: {_e}"
+                    
+                    # Clear existing data for full load (but preserve table structure)
+                    if existing_rows > 0:
+                        yield f"Full load mode: truncating {existing_rows} existing rows from main table..."
+                        self.db_manager.truncate_table(connection, table_name)
+                        yield "Main table data cleared for full load"
             else:  # append
                 if not table_exists:
                     yield "Append mode: main table does not exist yet, creating new main table..."
@@ -271,42 +283,35 @@ class DataIngester:
                     except Exception as e:
                         yield f"WARNING: Failed to add metadata columns to main table: {e}"
                     
-                    # Sync main table schema to handle wider varchar columns
-                    if self.enable_type_inference:
-                        try:
-                            sync_actions = self.db_manager.sync_table_schema(connection, table_name, columns)
-                            yield f"Main table schema sync: added={len(sync_actions['added'])}, widened={len(sync_actions['widened'])}, skipped={len(sync_actions['skipped'])}"
-                        except Exception as _e:
-                            yield f"WARNING: Main table schema sync failed: {_e}"
+                    # Sync main table columns to add missing columns from file (never modify existing types)
+                    try:
+                        column_sync_actions = self.db_manager.sync_main_table_columns(connection, table_name, columns)
+                        if column_sync_actions['added']:
+                            yield f"Added {len(column_sync_actions['added'])} missing columns from input file: {[col['column'] for col in column_sync_actions['added']]}"
+                        if column_sync_actions['mismatched']:
+                            yield f"WARNING: {len(column_sync_actions['mismatched'])} columns have different types - preserved existing table types"
+                            for mismatch in column_sync_actions['mismatched']:
+                                yield f"  - Column '{mismatch['column']}': table={mismatch['existing_type']}, file={mismatch['file_type']}"
+                        if not column_sync_actions['added'] and not column_sync_actions['mismatched']:
+                            yield "Main table columns are compatible with input file"
+                    except Exception as _e:
+                        yield f"WARNING: Main table column sync failed: {_e}"
 
-            # Handle stage table - check for schema compatibility before creation
+            # Handle stage table - always drop and recreate to match input file exactly
             if stage_exists:
-                yield "Stage table exists, checking schema compatibility..."
-                try:
-                    # Ensure metadata columns exist first
-                    meta_actions = self.db_manager.ensure_metadata_columns(connection, stage_table_name)
-                    if meta_actions['added']:
-                        yield f"Added missing metadata columns to stage table: {[col['column'] for col in meta_actions['added']]}"
-                    
-                    # Always try to sync stage table schema to handle wider varchar columns
-                    sync_actions = self.db_manager.sync_table_schema(connection, stage_table_name, columns)
-                    if sync_actions['added'] or sync_actions['widened']:
-                        yield f"Stage table schema updated: added={len(sync_actions['added'])}, widened={len(sync_actions['widened'])}"
-                    else:
-                        yield "Stage table schema is compatible, reusing existing table"
-                    
-                    # Clear existing data since we're reusing the table
-                    self.db_manager.truncate_table(connection, stage_table_name)
-                except Exception as e:
-                    yield f"Stage table schema sync failed, recreating table: {str(e)}"
-                    # If sync fails, drop and recreate
-                    self.db_manager.create_table(connection, stage_table_name, columns, add_metadata_columns=True)
+                yield "Stage table exists, dropping and recreating to match input file columns..."
+                # Drop existing stage table
+                self.db_manager.drop_table_if_exists(connection, stage_table_name)
+                yield "Existing stage table dropped"
             else:
-                # Create new stage table
-                self.db_manager.create_table(connection, stage_table_name, columns, add_metadata_columns=True)
+                yield "Creating new stage table to match input file columns..."
+            
+            # Always create fresh stage table with exact input file structure
+            self.db_manager.create_table(connection, stage_table_name, columns, add_metadata_columns=True)
+            column_names = [col['name'] for col in columns]
+            yield f"Stage table recreated with {len(columns)} data columns: {column_names[:5]}{'...' if len(columns) > 5 else ''}"
+            yield "Stage table ready for data loading"
 
-            # Create/validate backup table with schema compatibility check
-            self.db_manager.create_backup_table(connection, table_name, columns)
             self.db_manager.create_validation_procedure(connection, table_base_name)
             yield f"Database tables created/validated ({(time.perf_counter()-t_tables):.2f}s)"
             prog.update_progress(progress_key, stage='tables_ready')
@@ -385,9 +390,9 @@ class DataIngester:
                 yield "Cancellation requested - stopping after validation"
                 raise Exception("Ingestion canceled by user")
 
-            # Step 12: Prepare for data load (full load mode already handled backup)
+            # Step 12: Prepare for data load (existing data backed up and main table cleared for full load)
             if load_mode == "full":
-                yield "Preparing for full load (existing data already backed up if any existed)"
+                yield "Preparing for full load (existing data backed up, main table structure preserved)"
             else:
                 yield "Append mode: will insert new rows into existing main table"
 
@@ -398,15 +403,58 @@ class DataIngester:
                 yield "Cancellation requested - stopping before final data move"
                 raise Exception("Ingestion canceled by user")
 
-            # Step 13: Move data from stage to main table
+            # Step 13: Move data from stage to main table with explicit column lists
             yield "Moving data from stage to main table..."
             t_move = time.perf_counter()
             cursor = connection.cursor()
-            # Use dynamic SQL with proper quoting to prevent SQL injection
+            
+            # Get column lists from both tables to ensure proper alignment
+            main_table_columns = self.db_manager.get_table_columns(connection, table_name, self.db_manager.data_schema)
+            stage_table_columns = self.db_manager.get_table_columns(connection, stage_table_name, self.db_manager.data_schema)
+            
+            # Create dictionaries for easy lookup
+            main_cols = {col['name'].lower(): col for col in main_table_columns}
+            stage_cols = {col['name'].lower(): col for col in stage_table_columns}
+            
+            # Build column lists ensuring both tables have the columns
+            insert_columns = []  # Columns for main table INSERT
+            select_columns = []  # Columns for stage table SELECT
+            
+            for stage_col in stage_table_columns:
+                col_name = stage_col['name']
+                col_name_lower = col_name.lower()
+                
+                if col_name_lower in main_cols:
+                    # Column exists in both tables
+                    insert_columns.append(f"[{col_name}]")
+                    select_columns.append(f"[{col_name}]")
+                else:
+                    # Stage column doesn't exist in main table - skip it
+                    yield f"WARNING: Skipping stage column [{col_name}] - not found in main table"
+            
+            # Check for main table columns missing from stage (should have default values)
+            for main_col in main_table_columns:
+                col_name = main_col['name']
+                col_name_lower = col_name.lower()
+                
+                if col_name_lower not in stage_cols:
+                    # Main table has column that stage doesn't have
+                    # This is OK if the column has a default value or allows NULLs
+                    yield f"INFO: Main table column [{col_name}] not in stage - will use default/NULL"
+            
+            if not insert_columns:
+                raise Exception("No compatible columns found between stage and main tables")
+            
+            # Build explicit INSERT statement with column lists
+            insert_column_list = ", ".join(insert_columns)
+            select_column_list = ", ".join(select_columns)
+            
             insert_sql = (
-                "INSERT INTO [" + self.db_manager.data_schema + "].[" + table_name + "] "
-                "SELECT * FROM [" + self.db_manager.data_schema + "].[" + stage_table_name + "]"
+                f"INSERT INTO [{self.db_manager.data_schema}].[{table_name}] ({insert_column_list}) "
+                f"SELECT {select_column_list} FROM [{self.db_manager.data_schema}].[{stage_table_name}]"
             )
+            
+            yield f"Transferring {len(insert_columns)} matching columns from stage to main table"
             cursor.execute(insert_sql)
             final_rows = cursor.rowcount
             if load_mode == "append":
@@ -414,6 +462,35 @@ class DataIngester:
             else:
                 yield f"Data successfully loaded to main table: {final_rows} rows ({(time.perf_counter()-t_move):.2f}s)"
                 prog.update_progress(progress_key, stage='moved_main')
+
+            # Create backup after successful data changes to main table
+            if final_rows > 0:
+                yield f"Data changes detected in main table ({final_rows} rows affected), creating backup..."
+                
+                # First, create/validate backup table with schema compatibility check
+                backup_exists = self.db_manager.table_exists(connection, table_base_name + '_backup')
+                if backup_exists:
+                    yield "Backup table exists, validating and adjusting schema if needed..."
+                else:
+                    yield "Creating new backup table..."
+                
+                # Get current main table columns for backup schema validation (exclude metadata columns)
+                main_table_columns = self.db_manager.get_table_columns(connection, table_name, self.db_manager.data_schema)
+                # Filter out metadata columns since create_backup_table will add them
+                data_columns = [col for col in main_table_columns if col['name'].lower() not in ['ref_data_loadtime', 'ref_data_loadtype']]
+                self.db_manager.create_backup_table(connection, table_name, data_columns)
+                yield "Backup table schema validated and synchronized with main table"
+                
+                # Ensure backup table has proper metadata columns
+                backup_table_name = f"{table_base_name}_backup"
+                if self.db_manager.table_exists(connection, backup_table_name, self.db_manager.backup_schema):
+                    backup_meta_actions = self.db_manager.ensure_backup_table_metadata_columns(connection, backup_table_name)
+                    if backup_meta_actions['added']:
+                        yield f"Added missing metadata columns to backup table: {[col['column'] for col in backup_meta_actions['added']]}"
+                
+                # Backup the current main table data AFTER successful data transfer
+                backup_rows = self.db_manager.backup_existing_data(connection, table_name, table_base_name)
+                yield f"Current main table state backed up: {backup_rows} rows with version tracking"
 
             # Check for cancellation before archiving
             if progress_key and prog.is_canceled(progress_key):

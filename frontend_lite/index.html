@@ -2182,6 +2182,10 @@
                         
                     } catch (error) {
                         this.uploadError = `Upload failed: ${error.message}`;
+                        // Refresh sections even on error
+                        this.loadReferenceDataConfig();
+                        this.loadBackups();
+                        this.loadLogs();
                     } finally {
                         this.isUploading = false;
                         this.disabled = false;
@@ -2197,6 +2201,10 @@
                     
                     this.performUpload(this.overrideType).catch(error => {
                         this.uploadError = `Upload failed: ${error.message}`;
+                        // Refresh sections even on error
+                        this.loadReferenceDataConfig();
+                        this.loadBackups();
+                        this.loadLogs();
                     }).finally(() => {
                         this.isUploading = false;
                         this.disabled = false;
@@ -2228,10 +2236,10 @@
                                     this.stopProgressPolling();
                                     this.disabled = false;
                                     
-                                    if (data.done && !data.error) {
-                                        // Refresh Reference Data after successful upload
-                                        this.loadReferenceDataConfig();
-                                    }
+                                    // Refresh all sections after upload completion (success or failure)
+                                    this.loadReferenceDataConfig(); // Reference Data Configuration
+                                    this.loadBackups(); // Rollback Dataset Versions  
+                                    this.loadLogs(); // System logs
                                 }
                             }
                         } catch (error) {
