@@ -1049,31 +1049,26 @@ async def get_schema_matched_tables(file_columns: Dict[str, List[str]]):
                 
                 await logger.log_info("schema_match_debug", f"Checking {table_schema}.{table_name}: file_cols={file_columns_set}, table_cols={table_columns_set}")
                 
-                # Check if file columns match table columns exactly
-                if file_columns_set == table_columns_set:
+                # Check if file columns are a subset of table columns (file columns must all exist in table)
+                if file_columns_set.issubset(table_columns_set):
                     matching_tables.append({
                         "schema": table_schema,
                         "table": table_name,
                         "full_name": f"{table_schema}.{table_name}"
                     })
-                    await logger.log_info("schema_match_debug", f"MATCH FOUND: {table_schema}.{table_name}")
+                    await logger.log_info("schema_match_debug", f"MATCH FOUND: {table_schema}.{table_name} - file columns are subset of table columns")
                 else:
-                    await logger.log_info("schema_match_debug", f"NO MATCH: {table_schema}.{table_name} - different column sets")
+                    missing_columns = file_columns_set - table_columns_set
+                    await logger.log_info("schema_match_debug", f"NO MATCH: {table_schema}.{table_name} - missing columns: {missing_columns}")
                     
             except Exception as e:
                 # Skip tables that can't be queried
                 await logger.log_warning("schema_match", f"Could not check schema for table {table_schema}.{table_name}: {str(e)}")
                 continue
         
-        # TEMPORARY: If no exact matches found, return first few tables for testing
-        if not matching_tables and all_tables_info:
-            await logger.log_info("schema_match_debug", "No exact matches found, returning first 3 tables for testing")
-            for table_info in all_tables_info[:3]:
-                matching_tables.append({
-                    "schema": table_info['schema'],
-                    "table": table_info['table'],
-                    "full_name": f"{table_info['schema']}.{table_info['table']}"
-                })
+        # Log final results
+        if not matching_tables:
+            await logger.log_info("schema_match_debug", "No compatible tables found - file contains columns not present in any existing table")
         
         await logger.log_info("schema_match", f"Found {len(matching_tables)} schema-matched tables out of {len(all_tables_info)} total tables")
         
