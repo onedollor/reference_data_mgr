@@ -187,9 +187,9 @@ namespace ReferenceDataApi.Controllers
                 var detectionResult = _csvDetector.DetectFormat(filePath);
 
                 // Clean up temp file
-                if (File.Exists(filePath))
+                if (System.IO.File.Exists(filePath))
                 {
-                    File.Delete(filePath);
+                    System.IO.File.Delete(filePath);
                 }
 
                 return Ok(detectionResult);
