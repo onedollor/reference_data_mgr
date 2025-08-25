@@ -112,11 +112,6 @@ namespace ReferenceDataApi.Models
         public List<string> Columns { get; set; }
     }
 
-    public class SchemaMatchResponse
-    {
-        public List<TableInfo> Tables { get; set; }
-        public int Count { get; set; }
-    }
 
     public class LogEntry
     {

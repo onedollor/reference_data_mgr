@@ -70,7 +70,14 @@ namespace ReferenceDataApi.Controllers
                     Message = isHealthy ? "Database connection successful" : "Database connection failed"
                 };
 
-                return isHealthy ? Ok(response) : BadRequest(response);
+                if (isHealthy)
+                {
+                    return Ok(response);
+                }
+                else
+                {
+                    return BadRequest(response);
+                }
             }
             catch (Exception ex)
             {
