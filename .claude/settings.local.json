@@ -10,7 +10,19 @@
       "Bash(mkdir:*)",
       "Bash(python:*)",
       "Bash(pip install:*)",
-      "Bash(source:*)"
+      "Bash(source:*)",
+      "Bash(find:*)",
+      "Bash(lsb_release:*)",
+      "WebSearch",
+      "Bash(dotnet --version)",
+      "Bash(dotnet --info)",
+      "Bash(dotnet --list-runtimes)",
+      "Bash(dotnet --list-sdks)",
+      "Bash(apt search:*)",
+      "Bash(dpkg:*)",
+      "Bash(chmod:*)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet restore:*)"
     ],
     "deny": []
   }

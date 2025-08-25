@@ -1,0 +1,7 @@
+/home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/obj/Debug/net6.0/ReferenceDataApi.csproj.AssemblyReference.cache
+/home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/obj/Debug/net6.0/ReferenceDataApi.GeneratedMSBuildEditorConfig.editorconfig
+/home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/obj/Debug/net6.0/ReferenceDataApi.AssemblyInfoInputs.cache
+/home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/obj/Debug/net6.0/ReferenceDataApi.AssemblyInfo.cs
+/home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/obj/Debug/net6.0/ReferenceDataApi.csproj.CoreCompileInputs.cache
+/home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/obj/Debug/net6.0/ReferenceDataApi.MvcApplicationPartsAssemblyInfo.cs
+/home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/obj/Debug/net6.0/ReferenceDataApi.MvcApplicationPartsAssemblyInfo.cache

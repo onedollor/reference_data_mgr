@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- Restrict to .NET Framework 4.5 compatible features -->
+    <LangVersion>5.0</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Core ASP.NET Core packages -->
+    <PackageReference Include="Microsoft.AspNetCore.App" />
+    
+    <!-- SQL Server connectivity -->
+    <PackageReference Include="System.Data.SqlClient" Version="4.8.5" />
+    
+    <!-- CSV processing -->
+    <PackageReference Include="CsvHelper" Version="12.3.2" />
+    
+    <!-- JSON processing -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    
+    <!-- Swagger for API documentation -->
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    
+    <!-- Configuration -->
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="6.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="6.0.0" />
+  </ItemGroup>
+
+</Project>

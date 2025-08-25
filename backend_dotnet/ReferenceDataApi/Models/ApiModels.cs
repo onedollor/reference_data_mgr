@@ -1,0 +1,207 @@
+using System;
+using System.Collections.Generic;
+
+namespace ReferenceDataApi.Models
+{
+    public class ApiResponse
+    {
+        public string Message { get; set; }
+        public string Version { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+
+    public class HealthResponse
+    {
+        public string Status { get; set; }
+        public string Database { get; set; }
+        public DateTime Timestamp { get; set; }
+        public string Message { get; set; }
+    }
+
+    public class ConfigResponse
+    {
+        public DatabaseSettings DatabaseSettings { get; set; }
+        public FileSettings FileSettings { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+
+    public class DatabaseSettings
+    {
+        public string DataSchema { get; set; }
+        public string BackupSchema { get; set; }
+        public string PostloadStoredProcedure { get; set; }
+    }
+
+    public class FileSettings
+    {
+        public string UploadPath { get; set; }
+        public string ArchivePath { get; set; }
+        public string TempPath { get; set; }
+    }
+
+    public class SchemasResponse
+    {
+        public List<string> Schemas { get; set; }
+        public string DefaultSchema { get; set; }
+        public int Count { get; set; }
+    }
+
+    public class FeaturesResponse
+    {
+        public bool AsyncIngestion { get; set; }
+        public bool ProgressTracking { get; set; }
+        public bool BackupSupport { get; set; }
+        public bool SchemaMatching { get; set; }
+        public bool CsvDetection { get; set; }
+        public bool RollbackSupport { get; set; }
+        public bool LoggingEnabled { get; set; }
+    }
+
+    public class FormatDetectionResponse
+    {
+        public bool Detected { get; set; }
+        public double Confidence { get; set; }
+        public CsvFormatSuggestion Suggestions { get; set; }
+        public FormatAnalysis Analysis { get; set; }
+        public string Message { get; set; }
+    }
+
+    public class CsvFormatSuggestion
+    {
+        public string HeaderDelimiter { get; set; }
+        public string ColumnDelimiter { get; set; }
+        public string RowDelimiter { get; set; }
+        public string TextQualifier { get; set; }
+        public int SkipLines { get; set; }
+        public string TrailerLine { get; set; }
+        public string LoadMode { get; set; }
+    }
+
+    public class FormatAnalysis
+    {
+        public int SampleSize { get; set; }
+        public List<string> DetectedDelimiters { get; set; }
+        public List<string> DetectedEncodings { get; set; }
+        public bool HasHeader { get; set; }
+        public bool HasTrailer { get; set; }
+        public int EstimatedRows { get; set; }
+        public int EstimatedColumns { get; set; }
+    }
+
+    public class TableColumn
+    {
+        public string Name { get; set; }
+        public string DataType { get; set; }
+        public int? MaxLength { get; set; }
+        public int? NumericPrecision { get; set; }
+        public int? NumericScale { get; set; }
+        public bool Nullable { get; set; }
+        public string DefaultValue { get; set; }
+        public int Position { get; set; }
+    }
+
+    public class TableInfo
+    {
+        public string Schema { get; set; }
+        public string Table { get; set; }
+        public string FullName { get; set; }
+    }
+
+    public class SchemaMatchRequest
+    {
+        public List<string> Columns { get; set; }
+    }
+
+    public class SchemaMatchResponse
+    {
+        public List<TableInfo> Tables { get; set; }
+        public int Count { get; set; }
+    }
+
+    public class LogEntry
+    {
+        public DateTime Timestamp { get; set; }
+        public string Level { get; set; }
+        public string Message { get; set; }
+        public string Context { get; set; }
+        public string Category { get; set; }
+        public string Source { get; set; }
+    }
+
+    public class LogResponse
+    {
+        public List<LogEntry> Logs { get; set; }
+        public int Count { get; set; }
+        public DateTime LastUpdated { get; set; }
+    }
+
+    public class ProgressInfo
+    {
+        public string Key { get; set; }
+        public bool Found { get; set; }
+        public bool Done { get; set; }
+        public bool Canceled { get; set; }
+        public string Error { get; set; }
+        public string Stage { get; set; }
+        public int Progress { get; set; }
+        public string Message { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+
+    public class TablesResponse
+    {
+        public List<TableInfo> Tables { get; set; }
+        public int Count { get; set; }
+    }
+
+    public class SchemaMatchResponse
+    {
+        public List<TableInfo> MatchingTables { get; set; }
+        public List<string> InputColumns { get; set; }
+        public int Count { get; set; }
+    }
+
+    public class ProgressResponse
+    {
+        public string Key { get; set; }
+        public bool Found { get; set; }
+        public bool Done { get; set; }
+        public bool Canceled { get; set; }
+        public string Error { get; set; }
+        public string Stage { get; set; }
+        public int Progress { get; set; }
+        public string Message { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+
+    public class LogsResponse
+    {
+        public List<LogEntry> Logs { get; set; }
+        public int Count { get; set; }
+        public int Limit { get; set; }
+        public string Level { get; set; }
+    }
+
+    public class BackupsResponse
+    {
+        public List<BackupInfo> Backups { get; set; }
+        public int Count { get; set; }
+        public string Table { get; set; }
+    }
+
+    public class BackupInfo
+    {
+        public string Table { get; set; }
+        public string BackupTable { get; set; }
+        public int VersionId { get; set; }
+        public DateTime CreatedDate { get; set; }
+        public int RowCount { get; set; }
+        public string Status { get; set; }
+    }
+
+    public class RollbackRequest
+    {
+        public string Table { get; set; }
+        public int? VersionId { get; set; }
+    }
+}
