@@ -22,6 +22,9 @@ namespace ReferenceDataApi.Models
     {
         public DatabaseSettings DatabaseSettings { get; set; }
         public FileSettings FileSettings { get; set; }
+        public DelimiterOptions delimiter_options { get; set; }
+        public DefaultDelimiters default_delimiters { get; set; }
+        public List<string> supported_formats { get; set; }
         public DateTime Timestamp { get; set; }
     }
 
@@ -37,6 +40,22 @@ namespace ReferenceDataApi.Models
         public string UploadPath { get; set; }
         public string ArchivePath { get; set; }
         public string TempPath { get; set; }
+    }
+
+    public class DelimiterOptions
+    {
+        public List<string> header_delimiter { get; set; }
+        public List<string> column_delimiter { get; set; }
+        public List<string> row_delimiter { get; set; }
+        public List<string> text_qualifier { get; set; }
+    }
+
+    public class DefaultDelimiters
+    {
+        public string header_delimiter { get; set; }
+        public string column_delimiter { get; set; }
+        public string row_delimiter { get; set; }
+        public string text_qualifier { get; set; }
     }
 
     public class SchemasResponse
@@ -62,8 +81,20 @@ namespace ReferenceDataApi.Models
         public bool Detected { get; set; }
         public double Confidence { get; set; }
         public CsvFormatSuggestion Suggestions { get; set; }
+        public DetectedFormat detected_format { get; set; }
         public FormatAnalysis Analysis { get; set; }
         public string Message { get; set; }
+    }
+
+    public class DetectedFormat
+    {
+        public string header_delimiter { get; set; }
+        public string column_delimiter { get; set; }
+        public string row_delimiter { get; set; }
+        public string text_qualifier { get; set; }
+        public int skip_lines { get; set; }
+        public string trailer_line { get; set; }
+        public string load_mode { get; set; }
     }
 
     public class CsvFormatSuggestion

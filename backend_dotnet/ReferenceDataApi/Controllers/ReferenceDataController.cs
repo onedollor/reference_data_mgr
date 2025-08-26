@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Web;
 using Microsoft.AspNetCore.Http;
@@ -112,6 +113,21 @@ namespace ReferenceDataApi.Controllers
                         ArchivePath = _configuration["FileSettings:ArchivePath"],
                         TempPath = _configuration["FileSettings:TempPath"]
                     },
+                    delimiter_options = new DelimiterOptions
+                    {
+                        header_delimiter = new List<string> { "|", ",", ";", "\t" },
+                        column_delimiter = new List<string> { "|", ",", ";", "\t" },
+                        row_delimiter = new List<string> { "\r\n", "\n", "|\"\"" },
+                        text_qualifier = new List<string> { "\"", "'", "" }
+                    },
+                    default_delimiters = new DefaultDelimiters
+                    {
+                        header_delimiter = "|",
+                        column_delimiter = "|",
+                        row_delimiter = "|\"\"\\r\\n",
+                        text_qualifier = "\""
+                    },
+                    supported_formats = new List<string> { "CSV" },
                     Timestamp = DateTime.UtcNow
                 };
 
@@ -311,53 +327,9 @@ namespace ReferenceDataApi.Controllers
         {
             try
             {
-                // For now, return a placeholder response
-                // In a full implementation, this would query the system_log table
-                var logs = new List<LogEntry>();
-                
-                // Placeholder implementation - would normally query database
-                logs.Add(new LogEntry
-                {
-                    Timestamp = DateTime.UtcNow.AddMinutes(-5),
-                    Level = "INFO",
-                    Message = "System started successfully",
-                    Context = "system_startup"
-                });
+                var logs = ReadSystemLogsFromFile(limit, level);
 
-                logs.Add(new LogEntry
-                {
-                    Timestamp = DateTime.UtcNow.AddMinutes(-2),
-                    Level = "INFO", 
-                    Message = "Database health check passed",
-                    Context = "health_check"
-                });
-
-                // Filter by level if specified - .NET Framework 4.5 compatible
-                if (!string.IsNullOrEmpty(level))
-                {
-                    var filteredLogs = new List<LogEntry>();
-                    foreach (var log in logs)
-                    {
-                        if (log.Level.Equals(level, StringComparison.OrdinalIgnoreCase))
-                        {
-                            filteredLogs.Add(log);
-                        }
-                    }
-                    logs = filteredLogs;
-                }
-
-                // Apply limit - .NET Framework 4.5 compatible
-                if (logs.Count > limit)
-                {
-                    var limitedLogs = new List<LogEntry>();
-                    for (int i = 0; i < limit && i < logs.Count; i++)
-                    {
-                        limitedLogs.Add(logs[i]);
-                    }
-                    logs = limitedLogs;
-                }
-
-                _logger.LogInfo("logs_query", "Retrieved " + logs.Count + " log entries");
+                _logger.LogInfo("logs_query", "Retrieved " + logs.Count + " log entries from file");
 
                 return Ok(new LogsResponse
                 {
@@ -372,6 +344,92 @@ namespace ReferenceDataApi.Controllers
                 var errorMsg = "Failed to retrieve logs: " + ex.Message;
                 _logger.LogError("logs_error", errorMsg);
                 return BadRequest(new { error = errorMsg });
+            }
+        }
+
+        private List<LogEntry> ReadSystemLogsFromFile(int limit, string level)
+        {
+            var logs = new List<LogEntry>();
+            var logFilePath = Path.Combine("logs", "system.log");
+
+            if (!System.IO.File.Exists(logFilePath))
+            {
+                return logs; // Return empty list if file doesn't exist
+            }
+
+            try
+            {
+                var lines = System.IO.File.ReadAllLines(logFilePath);
+                
+                // Read lines in reverse order to get most recent logs first
+                for (int i = lines.Length - 1; i >= 0; i--)
+                {
+                    var line = lines[i];
+                    if (string.IsNullOrWhiteSpace(line)) continue;
+
+                    var logEntry = ParseLogLine(line);
+                    if (logEntry != null)
+                    {
+                        // Filter by level if specified
+                        if (string.IsNullOrEmpty(level) || logEntry.Level.Equals(level, StringComparison.OrdinalIgnoreCase))
+                        {
+                            logs.Add(logEntry);
+                            
+                            // Stop if we've reached the limit
+                            if (logs.Count >= limit)
+                            {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("read_logs_error", "Failed to read log file: " + ex.Message);
+            }
+
+            return logs;
+        }
+
+        private LogEntry ParseLogLine(string line)
+        {
+            try
+            {
+                // Log format: "2025-08-25 21:58:45 [INFO] context: message"
+                if (line.Length < 23) return null; // Minimum length check
+
+                var timestampStr = line.Substring(0, 19); // "2025-08-25 21:58:45"
+                DateTime timestamp;
+                if (!DateTime.TryParseExact(timestampStr, "yyyy-MM-dd HH:mm:ss", null, DateTimeStyles.None, out timestamp))
+                {
+                    return null;
+                }
+
+                var levelStart = line.IndexOf('[');
+                var levelEnd = line.IndexOf(']');
+                if (levelStart == -1 || levelEnd == -1 || levelEnd <= levelStart) return null;
+
+                var levelStr = line.Substring(levelStart + 1, levelEnd - levelStart - 1);
+
+                var contextStart = levelEnd + 2;
+                var contextEnd = line.IndexOf(':', contextStart);
+                if (contextEnd == -1) return null;
+
+                var contextStr = line.Substring(contextStart, contextEnd - contextStart);
+                var messageStr = line.Substring(contextEnd + 2); // Skip ": "
+
+                return new LogEntry
+                {
+                    Timestamp = timestamp,
+                    Level = levelStr,
+                    Context = contextStr,
+                    Message = messageStr
+                };
+            }
+            catch
+            {
+                return null; // Return null for unparseable lines
             }
         }
 

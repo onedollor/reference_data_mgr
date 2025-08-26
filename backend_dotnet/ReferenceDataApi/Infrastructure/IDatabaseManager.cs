@@ -22,5 +22,6 @@ namespace ReferenceDataApi.Infrastructure
         void EnsureReferenceDataCfgTable();
         void EnsurePostloadStoredProcedure();
         void InsertReferenceDataCfgRecord(string tableName);
+        void ExecuteNonQuery(string sql);
     }
 }

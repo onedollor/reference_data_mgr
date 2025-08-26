@@ -16,6 +16,9 @@ namespace ReferenceDataApi
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            // Configure to listen on port 8000
+            builder.WebHost.UseUrls("http://localhost:8000", "https://localhost:8001");
+
             // Add services to the container - .NET Framework 4.5 compatible way
             ConfigureServices(builder.Services, builder.Configuration);
 

@@ -78,6 +78,16 @@ namespace ReferenceDataApi.Services
                         TrailerLine = hasTrailer ? "yes" : "",
                         LoadMode = "full"
                     },
+                    detected_format = new DetectedFormat
+                    {
+                        header_delimiter = primaryDelimiter,
+                        column_delimiter = primaryDelimiter,
+                        row_delimiter = "\r\n",
+                        text_qualifier = "\"",
+                        skip_lines = 0,
+                        trailer_line = hasTrailer ? "yes" : "",
+                        load_mode = "full"
+                    },
                     Analysis = new FormatAnalysis
                     {
                         SampleSize = lines.Count,

@@ -22,7 +22,14 @@
       "Bash(dpkg:*)",
       "Bash(chmod:*)",
       "Bash(dotnet build:*)",
-      "Bash(dotnet restore:*)"
+      "Bash(dotnet restore:*)",
+      "Bash(dotnet run:*)",
+      "Bash(./backend_dotnet/start_backend_dotnet.sh:*)",
+      "Bash(./start_frontend_lite.sh:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_close",
+      "mcp__playwright__browser_install",
+      "Bash(pkill:*)"
     ],
     "deny": []
   }

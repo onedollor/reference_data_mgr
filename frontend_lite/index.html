@@ -634,6 +634,14 @@
                                         </template>
                                         <option value="custom">Custom</option>
                                     </select>
+                                    <template x-if="formatConfig.header_delimiter === 'custom'">
+                                        <input 
+                                            type="text" 
+                                            x-model="formatConfig.header_delimiter_custom"
+                                            placeholder="Enter custom header delimiter"
+                                            class="w-full mt-2 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-td-green focus:border-transparent"
+                                        />
+                                    </template>
                                 </div>
                                 
                                 <!-- Column Delimiter -->
@@ -648,6 +656,14 @@
                                         </template>
                                         <option value="custom">Custom</option>
                                     </select>
+                                    <template x-if="formatConfig.column_delimiter === 'custom'">
+                                        <input 
+                                            type="text" 
+                                            x-model="formatConfig.column_delimiter_custom"
+                                            placeholder="Enter custom column delimiter"
+                                            class="w-full mt-2 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-td-green focus:border-transparent"
+                                        />
+                                    </template>
                                 </div>
                                 
                                 <!-- Row Delimiter -->
@@ -662,6 +678,14 @@
                                         </template>
                                         <option value="custom">Custom</option>
                                     </select>
+                                    <template x-if="formatConfig.row_delimiter === 'custom'">
+                                        <input 
+                                            type="text" 
+                                            x-model="formatConfig.row_delimiter_custom"
+                                            placeholder="Enter custom row delimiter"
+                                            class="w-full mt-2 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-td-green focus:border-transparent"
+                                        />
+                                    </template>
                                 </div>
                                 
                                 <!-- Text Qualifier -->
@@ -676,6 +700,14 @@
                                         </template>
                                         <option value="custom">Custom</option>
                                     </select>
+                                    <template x-if="formatConfig.text_qualifier === 'custom'">
+                                        <input 
+                                            type="text" 
+                                            x-model="formatConfig.text_qualifier_custom"
+                                            placeholder="Enter custom text qualifier"
+                                            class="w-full mt-2 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-td-green focus:border-transparent"
+                                        />
+                                    </template>
                                 </div>
                                 
                                 <!-- Skip Lines -->

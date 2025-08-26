@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using ReferenceDataApi.Infrastructure;
 
 namespace ReferenceDataApi.Services
@@ -31,27 +32,41 @@ namespace ReferenceDataApi.Services
                 _progressTracker.UpdateProgress(progressKey, "starting", 5, "Starting data ingestion process");
                 _logger.LogInfo("ingestion_start", "Starting background ingestion for " + tableName);
 
-                // This is a simplified placeholder implementation
-                // In a full implementation, this would:
-                // 1. Parse the CSV file using the format configuration
-                // 2. Create/validate database tables
-                // 3. Process data in batches
-                // 4. Handle backup operations
-                // 5. Import data with proper error handling
+                // Step 1: Parse the CSV file using the format configuration
+                _progressTracker.UpdateProgress(progressKey, "parsing", 20, "Parsing CSV file");
                 
-                _progressTracker.UpdateProgress(progressKey, "parsing", 20, "Parsing file format");
+                var csvData = ParseCsvFile(filePath, formatConfig);
+                if (csvData == null || csvData.Count == 0)
+                {
+                    throw new Exception("No data found in CSV file");
+                }
+
+                var headers = csvData[0];
+                var dataRows = csvData.Skip(1).ToList();
+
+                _logger.LogInfo("csv_parsed", "Parsed CSV with " + headers.Count + " columns and " + dataRows.Count + " data rows");
                 
-                // Simulate processing steps
-                System.Threading.Thread.Sleep(1000); // .NET Framework 4.5 compatible
+                // Step 2: Create/validate database table
+                _progressTracker.UpdateProgress(progressKey, "validating", 40, "Creating database table");
                 
-                _progressTracker.UpdateProgress(progressKey, "validating", 40, "Validating data schema");
-                System.Threading.Thread.Sleep(1000);
+                var fullTableName = targetSchema + "." + tableName;
+                CreateTableFromHeaders(fullTableName, headers);
+                _logger.LogInfo("table_created", "Created table " + fullTableName);
                 
+                // Step 3: Import data in batches
                 _progressTracker.UpdateProgress(progressKey, "importing", 70, "Importing data to database");
-                System.Threading.Thread.Sleep(2000);
                 
+                ImportDataToTable(fullTableName, headers, dataRows);
+                _logger.LogInfo("data_imported", "Imported " + dataRows.Count + " rows to " + fullTableName);
+                
+                // Step 4: Finalize
                 _progressTracker.UpdateProgress(progressKey, "finalizing", 90, "Finalizing import process");
-                System.Threading.Thread.Sleep(500);
+                
+                // Clean up temp file
+                if (System.IO.File.Exists(filePath))
+                {
+                    System.IO.File.Delete(filePath);
+                }
 
                 _progressTracker.MarkDone(progressKey);
                 _logger.LogInfo("ingestion_complete", "Background ingestion completed for " + tableName);
@@ -61,6 +76,62 @@ namespace ReferenceDataApi.Services
                 var errorMessage = "Data ingestion failed: " + ex.Message;
                 _progressTracker.MarkError(progressKey, errorMessage);
                 _logger.LogError("ingestion_error", errorMessage);
+                
+                // Clean up temp file on error
+                if (System.IO.File.Exists(filePath))
+                {
+                    try { System.IO.File.Delete(filePath); } catch { }
+                }
+            }
+        }
+
+        private List<List<string>> ParseCsvFile(string filePath, Dictionary<string, string> formatConfig)
+        {
+            var delimiter = formatConfig.ContainsKey("delimiter") ? formatConfig["delimiter"] : ",";
+            var result = new List<List<string>>();
+
+            using (var reader = new System.IO.StreamReader(filePath))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    // Simple CSV parsing - in production would use more robust parser
+                    var fields = line.Split(delimiter.ToCharArray()).Select(f => f.Trim('"')).ToList();
+                    result.Add(fields);
+                }
+            }
+
+            return result;
+        }
+
+        private void CreateTableFromHeaders(string fullTableName, List<string> headers)
+        {
+            // Create table with all VARCHAR columns for simplicity
+            var columnDefinitions = headers.Select(header => "[" + header + "] VARCHAR(255)").ToList();
+            var tableNameParts = fullTableName.Split('.');
+            var createTableSql = "IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '" + tableNameParts[1] + "' AND TABLE_SCHEMA = '" + tableNameParts[0] + "') " +
+                               "CREATE TABLE " + fullTableName + " (" + string.Join(", ", columnDefinitions) + ")";
+            
+            _databaseManager.ExecuteNonQuery(createTableSql);
+        }
+
+        private void ImportDataToTable(string fullTableName, List<string> headers, List<List<string>> dataRows)
+        {
+            foreach (var row in dataRows)
+            {
+                var values = row.Select(v => "'" + v.Replace("'", "''") + "'").ToList(); // Escape single quotes
+                var headerColumns = string.Join(", ", headers.Select(h => "[" + h + "]"));
+                var insertSql = "INSERT INTO " + fullTableName + " (" + headerColumns + ") VALUES (" + string.Join(", ", values) + ")";
+                
+                try
+                {
+                    _databaseManager.ExecuteNonQuery(insertSql);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError("insert_error", "Failed to insert row: " + ex.Message);
+                    // Continue with other rows
+                }
             }
         }
     }

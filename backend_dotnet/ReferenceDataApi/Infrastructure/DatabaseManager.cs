@@ -826,6 +826,26 @@ namespace ReferenceDataApi.Infrastructure
             }
         }
         
+        public void ExecuteNonQuery(string sql)
+        {
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+                    using (var command = new SqlCommand(sql, connection))
+                    {
+                        command.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("execute_non_query", "SQL execution failed: " + ex.Message + " SQL: " + sql);
+                throw new Exception("SQL execution failed: " + ex.Message);
+            }
+        }
+
         // Helper method to extract table base name (remove _stage, _backup suffixes)
         private string ExtractTableBaseName(string tableName)
         {
