@@ -118,6 +118,7 @@ namespace ReferenceDataApi.Models
         public bool HasTrailer { get; set; }
         public int EstimatedRows { get; set; }
         public int EstimatedColumns { get; set; }
+        public List<string> Columns { get; set; }
     }
 
     public class TableColumn

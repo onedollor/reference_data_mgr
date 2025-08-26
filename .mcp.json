@@ -10,13 +10,13 @@
     "type": "stdio",
     "command": "npx",
     "args": [
-      "@playwright/mcp@latest"
-     ,"--isolated"
-     ,"--no-sandbox"
-     ,"--disable-setuid-sandbox"
-     ,"--storage-state={/home/lin/mcp/playwright/storage.json}"
+      "@playwright/mcp@latest",
+      "--isolated",
+      "--storage-state=/home/lin/mcp/playwright/storage.json"
     ],
-    "env": {}
+    "env": {
+      "PLAYWRIGHT_LAUNCH_OPTIONS": "{\"args\": [\"--no-sandbox\", \"--disable-setuid-sandbox\"]}"
+    }
   }
 }
 

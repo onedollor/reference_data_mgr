@@ -64,6 +64,9 @@ namespace ReferenceDataApi.Services
 
                 var confidence = CalculateConfidence(lines, primaryDelimiter);
 
+                // Extract column names from header if detected
+                var columnNames = ExtractColumnNames(lines, primaryDelimiter, hasHeader);
+
                 var response = new FormatDetectionResponse
                 {
                     Detected = confidence > 0.5,
@@ -96,7 +99,8 @@ namespace ReferenceDataApi.Services
                         HasHeader = hasHeader,
                         HasTrailer = hasTrailer,
                         EstimatedRows = rowCount,
-                        EstimatedColumns = columnCount
+                        EstimatedColumns = columnCount,
+                        Columns = columnNames
                     },
                     Message = confidence > 0.5 ? "Format detected successfully" : "Format detection uncertain"
                 };
@@ -213,6 +217,44 @@ namespace ReferenceDataApi.Services
             }
 
             return (double)textCount / parts.Length;
+        }
+
+        private List<string> ExtractColumnNames(List<string> lines, string delimiter, bool hasHeader)
+        {
+            if (lines.Count == 0)
+                return new List<string>();
+
+            if (hasHeader && lines.Count > 0)
+            {
+                // Use the first line as column headers
+                var headerLine = lines[0];
+                var columnNames = headerLine.Split(new string[] { delimiter }, StringSplitOptions.None);
+                
+                // Clean up column names - remove quotes and trim whitespace
+                var cleanedNames = new List<string>();
+                foreach (var name in columnNames)
+                {
+                    var cleanName = name.Trim().Trim('"').Trim('\'').Trim();
+                    if (string.IsNullOrEmpty(cleanName))
+                    {
+                        cleanName = "column_" + (cleanedNames.Count + 1);
+                    }
+                    cleanedNames.Add(cleanName);
+                }
+                
+                return cleanedNames;
+            }
+            else
+            {
+                // Generate generic column names
+                var columnCount = EstimateColumns(lines[0], delimiter);
+                var columnNames = new List<string>();
+                for (int i = 1; i <= columnCount; i++)
+                {
+                    columnNames.Add("column_" + i);
+                }
+                return columnNames;
+            }
         }
 
         private double CalculateConfidence(List<string> lines, string delimiter)

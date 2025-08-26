@@ -820,7 +820,7 @@
                                         >
                                             <option value="" x-text="schemaMatchedTablesCount > 0 ? `Choose from ${schemaMatchedTablesCount} schema-matched table${schemaMatchedTablesCount > 1 ? 's' : ''}...` : 'No tables match your file schema...'"></option>
                                             <template x-for="table in availableTables">
-                                                <option :value="typeof table === 'string' ? table : table.full_name" x-text="typeof table === 'string' ? table : table.full_name"></option>
+                                                <option :value="typeof table === 'string' ? table : table.fullName" x-text="typeof table === 'string' ? table : table.fullName"></option>
                                             </template>
                                         </select>
                                     </div>
@@ -1988,7 +1988,7 @@
                         if (response.ok) {
                             const data = await response.json();
                             console.log('Schema-match API response:', data);
-                            this.availableTables = data.tables || [];
+                            this.availableTables = data.matchingTables || [];
                             this.schemaMatchedTablesCount = data.count || 0;
                             console.log('Available tables:', this.availableTables);
                             console.log('Schema matched count:', this.schemaMatchedTablesCount);
