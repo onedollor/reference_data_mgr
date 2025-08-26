@@ -33,5 +33,25 @@
       "Bash(kill:*)"
     ],
     "deny": []
-  }
+  },
+        "mcpServers": {
+        "context7": {
+          "type": "http",
+          "url": "https://mcp.context7.com/mcp",
+          "headers": {
+            "CONTEXT7_API_KEY": "ctx7sk-1fe9d703-c377-447c-987f-5ad4ec1b6494"
+          }
+        },
+        "playwright": {
+          "type": "stdio",
+          "command": "npx",
+          "args": [
+            "@playwright/mcp@latest"
+           ,"--isolated"
+           ,"--storage-state={/home/lin/mcp/playwright/storage.json}"
+          ],
+          "env": {}
+        }
+      }, 
+
 }

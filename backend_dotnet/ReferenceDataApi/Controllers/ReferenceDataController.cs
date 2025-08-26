@@ -592,10 +592,13 @@ namespace ReferenceDataApi.Controllers
                     formatConfig["override_load_type"] = override_load_type;
                 }
 
+                // Extract base table name from filename (remove timestamp and .csv extension)
+                var baseTableName = ExtractTableNameFromFilename(file.FileName);
+                
                 // Start background processing using Thread instead of Task (for .NET Framework 4.5 compatibility)
                 var processingThread = new System.Threading.Thread(() =>
                 {
-                    _dataIngestion.ProcessFileBackground(tempPath, file.FileName, target_schema, 
+                    _dataIngestion.ProcessFileBackground(tempPath, baseTableName, target_schema, 
                         formatConfig, config_reference_data, progressKey);
                 });
                 
@@ -687,6 +690,33 @@ namespace ReferenceDataApi.Controllers
                 _logger.LogError("load_type_verification", errorMsg);
                 return BadRequest(new { error = errorMsg });
             }
+        }
+
+        // Helper method to extract base table name from filename
+        private string ExtractTableNameFromFilename(string filename)
+        {
+            if (string.IsNullOrEmpty(filename))
+                return filename;
+            
+            // Remove .csv extension first
+            var nameWithoutExtension = filename;
+            if (nameWithoutExtension.ToLower().EndsWith(".csv"))
+            {
+                nameWithoutExtension = nameWithoutExtension.Substring(0, nameWithoutExtension.Length - 4);
+            }
+            
+            // Pattern: [a-zA-Z0-9_-]*[._-]{date|time|timestamp}
+            // Extract everything before the first date/timestamp pattern
+            var regex = new System.Text.RegularExpressions.Regex(@"^([a-zA-Z0-9_-]+)[._-](\d{8}|\d{4}-\d{2}-\d{2}|\d{14}|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})");
+            var match = regex.Match(nameWithoutExtension);
+            
+            if (match.Success)
+            {
+                return match.Groups[1].Value;
+            }
+            
+            // If no timestamp pattern found, return the name without extension
+            return nameWithoutExtension;
         }
 
         // Helper method to get client IP - .NET Framework 4.5 compatible

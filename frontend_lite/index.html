@@ -1867,8 +1867,23 @@
                 },
                 
                 generateSuggestedTableName(fileName) {
-                    // Remove file extension and clean up the name
-                    let tableName = fileName.replace(/\.[^/.]+$/, '');
+                    // Remove file extension first
+                    let nameWithoutExtension = fileName.replace(/\.[^/.]+$/, '');
+                    
+                    // Extract base table name from filename (remove timestamp portion)
+                    // Pattern: [a-zA-Z0-9_-]*[._-]{date|time|timestamp}
+                    // Look for timestamp patterns: 20250811, 2025-08-11, 20250811120000, etc.
+                    const timestampRegex = /^([a-zA-Z0-9_-]+)[._-](\d{8}|\d{4}-\d{2}-\d{2}|\d{14}|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/;
+                    const match = nameWithoutExtension.match(timestampRegex);
+                    
+                    let tableName;
+                    if (match) {
+                        // Use the base name part before the timestamp
+                        tableName = match[1];
+                    } else {
+                        // No timestamp pattern found, use the whole name without extension
+                        tableName = nameWithoutExtension;
+                    }
                     
                     // Replace spaces, hyphens, and other special characters with underscores
                     tableName = tableName.replace(/[^a-zA-Z0-9_]/g, '_');
