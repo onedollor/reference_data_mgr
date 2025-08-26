@@ -71,6 +71,23 @@ namespace ReferenceDataApi
             app.UseRouting();
             
             app.MapControllers();
+
+            // Initialize database tables during startup
+            using (var scope = app.Services.CreateScope())
+            {
+                var dbManager = scope.ServiceProvider.GetRequiredService<IDatabaseManager>();
+                try
+                {
+                    dbManager.EnsureReferenceDataCfgTable();
+                    dbManager.EnsurePostloadStoredProcedure();
+                }
+                catch (Exception ex)
+                {
+                    var logger = scope.ServiceProvider.GetRequiredService<ILogger>();
+                    logger.LogError("startup_init", "Failed to initialize database: " + ex.Message);
+                    // Don't throw - allow app to continue even if initialization fails
+                }
+            }
         }
     }
 }

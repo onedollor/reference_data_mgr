@@ -690,17 +690,33 @@ namespace ReferenceDataApi.Infrastructure
                 {
                     connection.Open();
                     
-                    var tableExists = TableExists("Reference_Data_Cfg", _dataSchema);
+                    // Check if table exists in StaffDB.dbo schema
+                    var checkSql = @"
+                        SELECT COUNT(*) 
+                        FROM INFORMATION_SCHEMA.TABLES 
+                        WHERE TABLE_CATALOG = @database AND TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Reference_Data_Cfg'";
+                        
+                    bool tableExists = false;
+                    using (var checkCommand = new SqlCommand(checkSql, connection))
+                    {
+                        checkCommand.Parameters.AddWithValue("@database", _staffDatabase);
+                        var count = (int)checkCommand.ExecuteScalar();
+                        tableExists = count > 0;
+                    }
                     
                     if (!tableExists)
                     {
                         var createSql = @"
-                            CREATE TABLE [" + _dataSchema + @"].[Reference_Data_Cfg] (
-                                [table_name] varchar(255) NOT NULL PRIMARY KEY,
+                            CREATE TABLE [" + _staffDatabase + @"].[dbo].[Reference_Data_Cfg] (
+                                [sp_name] varchar(255) NULL,
+                                [ref_name] varchar(255) NOT NULL,
+                                [source_db] varchar(255) NULL,
+                                [source_schema] varchar(255) NULL,
+                                [source_table] varchar(255) NULL,
+                                [is_enabled] bit NOT NULL DEFAULT 1,
                                 [last_updated] datetime NOT NULL DEFAULT GETDATE(),
-                                [row_count] int NULL,
-                                [status] varchar(50) NOT NULL DEFAULT 'active',
-                                [created_date] datetime NOT NULL DEFAULT GETDATE()
+                                [created_date] datetime NOT NULL DEFAULT GETDATE(),
+                                CONSTRAINT PK_Reference_Data_Cfg PRIMARY KEY ([ref_name])
                             )";
                             
                         using (var command = new SqlCommand(createSql, connection))
@@ -708,7 +724,7 @@ namespace ReferenceDataApi.Infrastructure
                             command.ExecuteNonQuery();
                         }
                         
-                        _logger.LogInfo("reference_cfg_created", "Created Reference_Data_Cfg table");
+                        _logger.LogInfo("reference_cfg_created", "Created Reference_Data_Cfg table in " + _staffDatabase + ".dbo");
                     }
                 }
             }
