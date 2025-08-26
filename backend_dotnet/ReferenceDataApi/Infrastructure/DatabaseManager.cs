@@ -15,6 +15,8 @@ namespace ReferenceDataApi.Infrastructure
         private readonly string _dataSchema;
         private readonly string _backupSchema;
         private readonly string _postloadSpName;
+        private readonly string _database;
+        private readonly string _staffDatabase;
         private readonly ILogger _logger;
 
         public DatabaseManager(IConfiguration configuration, ILogger logger)
@@ -23,6 +25,8 @@ namespace ReferenceDataApi.Infrastructure
             _dataSchema = configuration["DatabaseSettings:DataSchema"] ?? "ref";
             _backupSchema = configuration["DatabaseSettings:BackupSchema"] ?? "bkp";  
             _postloadSpName = configuration["DatabaseSettings:PostloadStoredProcedure"] ?? "sp_ref_postload";
+            _database = configuration["DatabaseSettings:Database"] ?? "ReferenceDataDB";
+            _staffDatabase = configuration["DatabaseSettings:StaffDatabase"] ?? "StaffDB";
             _logger = logger;
         }
 
@@ -859,6 +863,154 @@ namespace ReferenceDataApi.Infrastructure
                 return tableName.Substring(0, tableName.Length - 7);
                 
             return tableName;
+        }
+
+        public List<Dictionary<string, object>> GetReferenceDataConfig()
+        {
+            var results = new List<Dictionary<string, object>>();
+
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+                    using (var command = new SqlCommand())
+                    {
+                        command.Connection = connection;
+                        command.CommandText = "SELECT [sp_name], [ref_name], [source_db], [source_schema], [source_table], [is_enabled] FROM [" + _staffDatabase + "].[dbo].[Reference_Data_Cfg] ORDER BY [ref_name]";
+                        
+                        using (var reader = command.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                var record = new Dictionary<string, object>();
+                                for (int i = 0; i < reader.FieldCount; i++)
+                                {
+                                    record[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                                }
+                                results.Add(record);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("get_reference_data_config", "Failed to retrieve Reference_Data_Cfg records: " + ex.Message);
+                throw new Exception("Failed to retrieve reference data configuration: " + ex.Message);
+            }
+
+            return results;
+        }
+
+        public List<Dictionary<string, object>> GetAllTablesWithSchemas()
+        {
+            var results = new List<Dictionary<string, object>>();
+
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+                    using (var command = new SqlCommand())
+                    {
+                        command.Connection = connection;
+                        command.CommandText = "SELECT TABLE_SCHEMA, TABLE_NAME FROM [" + _database + "].INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_SCHEMA, TABLE_NAME";
+                        
+                        using (var reader = command.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                var table = new Dictionary<string, object>
+                                {
+                                    {"schema", reader.GetString(0)},
+                                    {"table", reader.GetString(1)},
+                                    {"full_name", reader.GetString(0) + "." + reader.GetString(1)}
+                                };
+                                results.Add(table);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("get_all_tables_with_schemas", "Failed to retrieve all tables with schemas: " + ex.Message);
+                throw new Exception("Failed to retrieve all tables: " + ex.Message);
+            }
+
+            return results;
+        }
+
+        public Dictionary<string, object> VerifyLoadType(string filename, string loadMode)
+        {
+            try
+            {
+                // Extract table name from filename (remove extension and special characters)
+                var tableName = System.IO.Path.GetFileNameWithoutExtension(filename);
+                tableName = System.Text.RegularExpressions.Regex.Replace(tableName, @"[^a-zA-Z0-9_]", "_");
+                
+                // Determine what the load type would be
+                var requestedLoadType = loadMode.ToLower() == "full" ? "F" : "A";
+                var currentLoadType = requestedLoadType; // Default to requested
+                
+                // Check if table exists and has existing load types
+                var existingLoadTypes = new List<string>();
+                var tableExists = TableExists(tableName, _dataSchema);
+                
+                if (tableExists)
+                {
+                    using (var connection = new SqlConnection(_connectionString))
+                    {
+                        connection.Open();
+                        using (var command = new SqlCommand())
+                        {
+                            command.Connection = connection;
+                            command.CommandText = "SELECT DISTINCT [ref_data_loadtype] FROM [" + _dataSchema + "].[" + tableName + "] WHERE [ref_data_loadtype] IS NOT NULL";
+                            
+                            try
+                            {
+                                using (var reader = command.ExecuteReader())
+                                {
+                                    while (reader.Read())
+                                    {
+                                        var loadType = reader.GetString(0);
+                                        if (!string.IsNullOrEmpty(loadType))
+                                        {
+                                            existingLoadTypes.Add(loadType.Trim());
+                                        }
+                                    }
+                                }
+                            }
+                            catch
+                            {
+                                // Table might not have ref_data_loadtype column yet
+                            }
+                        }
+                    }
+                }
+                
+                var hasMismatch = currentLoadType != requestedLoadType;
+                
+                var result = new Dictionary<string, object>
+                {
+                    {"table_name", tableName},
+                    {"requested_load_mode", loadMode},
+                    {"requested_load_type", requestedLoadType},
+                    {"determined_load_type", currentLoadType},
+                    {"has_mismatch", hasMismatch},
+                    {"existing_load_types", existingLoadTypes},
+                    {"table_exists", tableExists},
+                    {"explanation", "Based on existing data, load type will be '" + currentLoadType + "' but you requested '" + requestedLoadType + "'"}
+                };
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("verify_load_type", "Failed to verify load type for " + filename + ": " + ex.Message);
+                throw new Exception("Failed to verify load type: " + ex.Message);
+            }
         }
     }
 }

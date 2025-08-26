@@ -2136,10 +2136,25 @@
                 async performUpload(overrideLoadType = null) {
                     const formData = new FormData();
                     formData.append('file', this.selectedFile);
-                    formData.append('header_delimiter', this.formatConfig.header_delimiter);
-                    formData.append('column_delimiter', this.formatConfig.column_delimiter);
-                    formData.append('row_delimiter', this.formatConfig.row_delimiter);
-                    formData.append('text_qualifier', this.formatConfig.text_qualifier);
+                    
+                    // Handle custom delimiter values
+                    const headerDelimiter = this.formatConfig.header_delimiter === 'custom' 
+                        ? this.formatConfig.header_delimiter_custom 
+                        : this.formatConfig.header_delimiter;
+                    const columnDelimiter = this.formatConfig.column_delimiter === 'custom' 
+                        ? this.formatConfig.column_delimiter_custom 
+                        : this.formatConfig.column_delimiter;
+                    const rowDelimiter = this.formatConfig.row_delimiter === 'custom' 
+                        ? this.formatConfig.row_delimiter_custom 
+                        : this.formatConfig.row_delimiter;
+                    const textQualifier = this.formatConfig.text_qualifier === 'custom' 
+                        ? this.formatConfig.text_qualifier_custom 
+                        : this.formatConfig.text_qualifier;
+                    
+                    formData.append('header_delimiter', headerDelimiter);
+                    formData.append('column_delimiter', columnDelimiter);
+                    formData.append('row_delimiter', rowDelimiter);
+                    formData.append('text_qualifier', textQualifier);
                     formData.append('skip_lines', this.formatConfig.skip_lines.toString());
                     formData.append('load_mode', this.formatConfig.load_mode);
                     

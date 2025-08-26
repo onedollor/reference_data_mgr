@@ -20,11 +20,12 @@ namespace ReferenceDataApi.Models
 
     public class ConfigResponse
     {
+        public int max_upload_size { get; set; }
+        public List<string> supported_formats { get; set; }
+        public DefaultDelimiters default_delimiters { get; set; }
+        public DelimiterOptions delimiter_options { get; set; }
         public DatabaseSettings DatabaseSettings { get; set; }
         public FileSettings FileSettings { get; set; }
-        public DelimiterOptions delimiter_options { get; set; }
-        public DefaultDelimiters default_delimiters { get; set; }
-        public List<string> supported_formats { get; set; }
         public DateTime Timestamp { get; set; }
     }
 

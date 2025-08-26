@@ -101,6 +101,22 @@ namespace ReferenceDataApi.Controllers
             {
                 var config = new ConfigResponse
                 {
+                    max_upload_size = int.Parse(_configuration["FileSettings:MaxUploadSize"] ?? "20971520"), // 20MB default
+                    supported_formats = new List<string> { "csv" },
+                    default_delimiters = new DefaultDelimiters
+                    {
+                        header_delimiter = "|",
+                        column_delimiter = "|",
+                        row_delimiter = "|\"\"\\r\\n",
+                        text_qualifier = "\""
+                    },
+                    delimiter_options = new DelimiterOptions
+                    {
+                        header_delimiter = new List<string> { ",", ";", "|", "\t" },
+                        column_delimiter = new List<string> { ",", ";", "|", "\t" },
+                        row_delimiter = new List<string> { "\r", "\n", "\r\n", "|\"\"\\r\\n" },
+                        text_qualifier = new List<string> { "\"", "'", "\"\"" }
+                    },
                     DatabaseSettings = new DatabaseSettings
                     {
                         DataSchema = _configuration["DatabaseSettings:DataSchema"],
@@ -113,21 +129,6 @@ namespace ReferenceDataApi.Controllers
                         ArchivePath = _configuration["FileSettings:ArchivePath"],
                         TempPath = _configuration["FileSettings:TempPath"]
                     },
-                    delimiter_options = new DelimiterOptions
-                    {
-                        header_delimiter = new List<string> { "|", ",", ";", "\t" },
-                        column_delimiter = new List<string> { "|", ",", ";", "\t" },
-                        row_delimiter = new List<string> { "\r\n", "\n", "|\"\"" },
-                        text_qualifier = new List<string> { "\"", "'", "" }
-                    },
-                    default_delimiters = new DefaultDelimiters
-                    {
-                        header_delimiter = "|",
-                        column_delimiter = "|",
-                        row_delimiter = "|\"\"\\r\\n",
-                        text_qualifier = "\""
-                    },
-                    supported_formats = new List<string> { "CSV" },
                     Timestamp = DateTime.UtcNow
                 };
 
@@ -524,22 +525,41 @@ namespace ReferenceDataApi.Controllers
         }
 
         [HttpPost("/upload")]
-        public ActionResult<object> UploadFile(IFormFile file, [FromForm] string tableName, [FromForm] string targetSchema, [FromForm] bool configReferenceData = false)
+        public ActionResult<object> UploadFile(
+            IFormFile file, 
+            [FromForm] string header_delimiter = "|",
+            [FromForm] string column_delimiter = "|", 
+            [FromForm] string row_delimiter = "|\"\"\\r\\n",
+            [FromForm] string text_qualifier = "\"",
+            [FromForm] int skip_lines = 0,
+            [FromForm] string trailer_line = null,
+            [FromForm] string load_mode = "full",
+            [FromForm] string override_load_type = null,
+            [FromForm] bool config_reference_data = false,
+            [FromForm] string target_schema = "ref")
         {
             if (file == null || file.Length == 0)
             {
                 return BadRequest(new { error = "No file uploaded" });
             }
 
-            if (string.IsNullOrEmpty(tableName))
+            // Validate file type
+            if (!file.FileName.ToLower().EndsWith(".csv"))
             {
-                return BadRequest(new { error = "Table name is required" });
+                return BadRequest(new { error = "Only CSV files are supported" });
             }
 
             try
             {
-                // Generate unique progress key
-                var progressKey = "upload_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                // Validate file size
+                var maxSize = int.Parse(_configuration["FileSettings:MaxUploadSize"] ?? "20971520"); // 20MB default
+                if (file.Length > maxSize)
+                {
+                    return BadRequest(new { error = "File size exceeds maximum limit of " + maxSize + " bytes" });
+                }
+
+                // Generate progress key from filename
+                var progressKey = System.Text.RegularExpressions.Regex.Replace(file.FileName, @"[^a-zA-Z0-9_]", "_");
                 
                 // Save uploaded file temporarily
                 var tempPath = Path.Combine(Path.GetTempPath(), progressKey + "_" + file.FileName);
@@ -549,21 +569,34 @@ namespace ReferenceDataApi.Controllers
                     file.CopyTo(stream);
                 }
 
-                _logger.LogInfo("file_uploaded", "File uploaded: " + file.FileName + " for table " + tableName);
+                _logger.LogInfo("file_uploaded", "File uploaded successfully: " + file.FileName + " (" + file.Length + " bytes)");
 
-                // Start background processing
+                // Create format configuration
                 var formatConfig = new Dictionary<string, string>
                 {
-                    {"delimiter", ","},
-                    {"quote_char", "\""},
-                    {"encoding", "utf-8"}
+                    {"header_delimiter", header_delimiter},
+                    {"column_delimiter", column_delimiter}, 
+                    {"row_delimiter", row_delimiter},
+                    {"text_qualifier", text_qualifier},
+                    {"skip_lines", skip_lines.ToString()},
+                    {"load_mode", load_mode}
                 };
+                
+                if (!string.IsNullOrEmpty(trailer_line))
+                {
+                    formatConfig["trailer_line"] = trailer_line;
+                }
+                
+                if (!string.IsNullOrEmpty(override_load_type))
+                {
+                    formatConfig["override_load_type"] = override_load_type;
+                }
 
                 // Start background processing using Thread instead of Task (for .NET Framework 4.5 compatibility)
                 var processingThread = new System.Threading.Thread(() =>
                 {
-                    _dataIngestion.ProcessFileBackground(tempPath, tableName, targetSchema ?? "ref", 
-                        formatConfig, configReferenceData, progressKey);
+                    _dataIngestion.ProcessFileBackground(tempPath, file.FileName, target_schema, 
+                        formatConfig, config_reference_data, progressKey);
                 });
                 
                 processingThread.IsBackground = true;
@@ -571,17 +604,87 @@ namespace ReferenceDataApi.Controllers
 
                 return Ok(new 
                 { 
-                    message = "File upload started", 
-                    progressKey = progressKey,
-                    fileName = file.FileName,
-                    tableName = tableName,
-                    fileSize = file.Length
+                    message = "File uploaded successfully", 
+                    filename = file.FileName,
+                    file_size = file.Length,
+                    status = "processing",
+                    progress_key = progressKey
                 });
             }
             catch (Exception ex)
             {
-                var errorMsg = "File upload failed: " + ex.Message;
+                var errorMsg = "Upload failed: " + ex.Message;
                 _logger.LogError("upload_error", errorMsg);
+                return BadRequest(new { error = errorMsg });
+            }
+        }
+
+        [HttpGet("/reference-data-config")]
+        public ActionResult<object> GetReferenceDataConfig()
+        {
+            try
+            {
+                var referenceDataConfig = _databaseManager.GetReferenceDataConfig();
+                
+                _logger.LogInfo("reference_data_config_query", "Retrieved " + referenceDataConfig.Count + " Reference_Data_Cfg records");
+                
+                return Ok(new 
+                { 
+                    data = referenceDataConfig,
+                    count = referenceDataConfig.Count
+                });
+            }
+            catch (Exception ex)
+            {
+                var errorMsg = "Failed to retrieve Reference_Data_Cfg records: " + ex.Message;
+                _logger.LogError("reference_data_config_query", errorMsg);
+                return BadRequest(new { error = errorMsg });
+            }
+        }
+
+        [HttpGet("/tables/all")]
+        public ActionResult<object> GetAllTablesWithSchemas()
+        {
+            try
+            {
+                var allTables = _databaseManager.GetAllTablesWithSchemas();
+                
+                _logger.LogInfo("all_tables_query", "Retrieved " + allTables.Count + " total tables for validation");
+                
+                return Ok(new 
+                { 
+                    tables = allTables,
+                    count = allTables.Count
+                });
+            }
+            catch (Exception ex)
+            {
+                var errorMsg = "Failed to retrieve all tables: " + ex.Message;
+                _logger.LogError("all_tables_query", errorMsg);
+                return BadRequest(new { error = errorMsg });
+            }
+        }
+
+        [HttpPost("/verify-load-type")]
+        public ActionResult<object> VerifyLoadType([FromForm] string filename, [FromForm] string load_mode)
+        {
+            if (string.IsNullOrEmpty(filename) || string.IsNullOrEmpty(load_mode))
+            {
+                return BadRequest(new { error = "Filename and load_mode are required" });
+            }
+
+            try
+            {
+                var verification = _databaseManager.VerifyLoadType(filename, load_mode);
+                
+                _logger.LogInfo("load_type_verification", "Verified load type for " + filename + ": mismatch=" + verification["has_mismatch"]);
+                
+                return Ok(verification);
+            }
+            catch (Exception ex)
+            {
+                var errorMsg = "Failed to verify load type: " + ex.Message;
+                _logger.LogError("load_type_verification", errorMsg);
                 return BadRequest(new { error = errorMsg });
             }
         }
