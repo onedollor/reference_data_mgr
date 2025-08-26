@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace ReferenceDataApi.Models
 {
@@ -219,12 +220,38 @@ namespace ReferenceDataApi.Models
 
     public class BackupInfo
     {
+        [JsonPropertyName("table")]
         public string Table { get; set; }
+        
+        [JsonPropertyName("backup_table")]
         public string BackupTable { get; set; }
+        
+        [JsonPropertyName("version_id")]
         public int VersionId { get; set; }
+        
+        [JsonPropertyName("created_date")]
         public DateTime CreatedDate { get; set; }
+        
+        [JsonPropertyName("row_count")]
         public int RowCount { get; set; }
+        
+        [JsonPropertyName("status")]
         public string Status { get; set; }
+        
+        [JsonPropertyName("base_name")]
+        public string BaseName { get; set; }
+        
+        [JsonPropertyName("has_main")]
+        public bool HasMain { get; set; }
+        
+        [JsonPropertyName("has_stage")]
+        public bool HasStage { get; set; }
+        
+        [JsonPropertyName("version_count")]
+        public int VersionCount { get; set; }
+        
+        [JsonPropertyName("latest_version")]
+        public int? LatestVersion { get; set; }
     }
 
     public class RollbackRequest

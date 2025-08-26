@@ -17,13 +17,6 @@
     "env": {
       "PLAYWRIGHT_LAUNCH_OPTIONS": "{\"args\": [\"--no-sandbox\", \"--disable-setuid-sandbox\"]}"
     }
-  },
-  "sequential-thinking": {
-    "command": "npx",
-    "args": [
-      "-y",
-      "@modelcontextprotocol/server-sequential-thinking"
-    ]
   }
 }
 

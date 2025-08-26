@@ -1028,5 +1028,99 @@ namespace ReferenceDataApi.Infrastructure
                 throw new Exception("Failed to verify load type: " + ex.Message);
             }
         }
+
+        public List<BackupInfo> GetBackupTables(string tableFilter = null)
+        {
+            var backups = new List<BackupInfo>();
+            
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+                    
+                    // Query to find all backup tables and their metadata
+                    var sql = @"
+                        SELECT 
+                            b.TABLE_NAME as backup_table_name,
+                            REPLACE(b.TABLE_NAME, '_backup', '') as base_name,
+                            CASE WHEN m.TABLE_NAME IS NOT NULL THEN 1 ELSE 0 END as has_main,
+                            CASE WHEN s.TABLE_NAME IS NOT NULL THEN 1 ELSE 0 END as has_stage,
+                            ISNULL(v.version_count, 0) as version_count,
+                            ISNULL(v.latest_version, 0) as latest_version,
+                            ISNULL(r.row_count, 0) as row_count,
+                            ISNULL(v.latest_created_date, GETDATE()) as created_date
+                        FROM [" + _database + @"].INFORMATION_SCHEMA.TABLES b
+                        LEFT JOIN [" + _database + @"].INFORMATION_SCHEMA.TABLES m ON 
+                            m.TABLE_SCHEMA = '" + _dataSchema + @"' AND 
+                            m.TABLE_NAME = REPLACE(b.TABLE_NAME, '_backup', '')
+                        LEFT JOIN [" + _database + @"].INFORMATION_SCHEMA.TABLES s ON 
+                            s.TABLE_SCHEMA = '" + _dataSchema + @"' AND 
+                            s.TABLE_NAME = REPLACE(b.TABLE_NAME, '_backup', '') + '_stage'
+                        OUTER APPLY (
+                            SELECT 
+                                COUNT(DISTINCT ref_data_version_id) as version_count,
+                                MAX(ref_data_version_id) as latest_version,
+                                MAX(ref_data_loadtime) as latest_created_date
+                            FROM [" + _backupSchema + @"].[' + b.TABLE_NAME + ']
+                            WHERE ref_data_version_id IS NOT NULL
+                        ) v
+                        OUTER APPLY (
+                            SELECT COUNT(*) as row_count 
+                            FROM [" + _backupSchema + @"].[' + b.TABLE_NAME + ']
+                        ) r
+                        WHERE b.TABLE_SCHEMA = '" + _backupSchema + @"' 
+                            AND b.TABLE_NAME LIKE '%_backup'
+                            AND b.TABLE_TYPE = 'BASE TABLE'";
+
+                    if (!string.IsNullOrEmpty(tableFilter))
+                    {
+                        sql += " AND REPLACE(b.TABLE_NAME, '_backup', '') LIKE @tableFilter";
+                    }
+
+                    sql += " ORDER BY b.TABLE_NAME";
+
+                    using (var command = new SqlCommand(sql, connection))
+                    {
+                        if (!string.IsNullOrEmpty(tableFilter))
+                        {
+                            command.Parameters.AddWithValue("@tableFilter", "%" + tableFilter + "%");
+                        }
+
+                        using (var reader = command.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                var baseName = reader["base_name"] != null ? reader["base_name"].ToString() : "";
+                                var backupTableName = reader["backup_table_name"] != null ? reader["backup_table_name"].ToString() : "";
+                                
+                                backups.Add(new BackupInfo
+                                {
+                                    Table = baseName,
+                                    BackupTable = backupTableName,
+                                    BaseName = baseName,
+                                    HasMain = Convert.ToBoolean(reader["has_main"]),
+                                    HasStage = Convert.ToBoolean(reader["has_stage"]),
+                                    VersionCount = Convert.ToInt32(reader["version_count"]),
+                                    LatestVersion = Convert.ToInt32(reader["latest_version"]),
+                                    RowCount = Convert.ToInt32(reader["row_count"]),
+                                    CreatedDate = Convert.ToDateTime(reader["created_date"]),
+                                    Status = "active",
+                                    VersionId = Convert.ToInt32(reader["latest_version"])
+                                });
+                            }
+                        }
+                    }
+                }
+                
+                _logger.LogInfo("get_backup_tables", "Retrieved " + backups.Count + " backup table entries");
+                return backups;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("get_backup_tables_error", "Failed to get backup tables: " + ex.Message);
+                return new List<BackupInfo>(); // Return empty list on error
+            }
+        }
     }
 }

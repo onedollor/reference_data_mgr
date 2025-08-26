@@ -439,33 +439,9 @@ namespace ReferenceDataApi.Controllers
         {
             try
             {
-                // Placeholder implementation for backup listing
-                // In a full implementation, this would query backup tables and metadata
-                var backups = new List<BackupInfo>();
-
-                // Add sample backup entries for demonstration
-                if (string.IsNullOrEmpty(table) || table == "sample_table")
-                {
-                    backups.Add(new BackupInfo
-                    {
-                        Table = "sample_table",
-                        BackupTable = "sample_table_backup",
-                        VersionId = 1,
-                        CreatedDate = DateTime.UtcNow.AddHours(-2),
-                        RowCount = 1000,
-                        Status = "active"
-                    });
-
-                    backups.Add(new BackupInfo
-                    {
-                        Table = "sample_table",
-                        BackupTable = "sample_table_backup", 
-                        VersionId = 2,
-                        CreatedDate = DateTime.UtcNow.AddHours(-1),
-                        RowCount = 1050,
-                        Status = "active"
-                    });
-                }
+                _logger.LogInfo("backups_query", "Querying backup tables from database" + (table != null ? " for table: " + table : ""));
+                
+                var backups = _databaseManager.GetBackupTables(table);
 
                 _logger.LogInfo("backups_query", "Retrieved " + backups.Count + " backup entries");
 

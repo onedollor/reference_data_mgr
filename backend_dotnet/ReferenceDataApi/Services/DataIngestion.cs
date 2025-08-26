@@ -93,11 +93,35 @@ namespace ReferenceDataApi.Services
             using (var reader = new System.IO.StreamReader(filePath))
             {
                 string line;
+                int lineNumber = 0;
                 while ((line = reader.ReadLine()) != null)
                 {
-                    // Simple CSV parsing - in production would use more robust parser
-                    var fields = line.Split(delimiter.ToCharArray()).Select(f => f.Trim('"')).ToList();
-                    result.Add(fields);
+                    lineNumber++;
+                    
+                    // Skip empty lines
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        // Simple CSV parsing - in production would use more robust parser
+                        var fields = line.Split(delimiter.ToCharArray()).Select(f => f.Trim().Trim('"')).ToList();
+                        
+                        // Remove empty trailing fields that might be caused by trailing delimiters
+                        while (fields.Count > 0 && string.IsNullOrWhiteSpace(fields[fields.Count - 1]))
+                        {
+                            fields.RemoveAt(fields.Count - 1);
+                        }
+                        
+                        result.Add(fields);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning("csv_parse_line_error", "Error parsing line " + lineNumber + ": " + ex.Message + " (line content: " + line + ")");
+                        // Continue with next line
+                    }
                 }
             }
 
@@ -117,8 +141,21 @@ namespace ReferenceDataApi.Services
 
         private void ImportDataToTable(string fullTableName, List<string> headers, List<List<string>> dataRows)
         {
+            var expectedColumnCount = headers.Count;
+            var skippedRows = 0;
+
             foreach (var row in dataRows)
             {
+                // Check if row has the expected number of columns
+                if (row.Count != expectedColumnCount)
+                {
+                    _logger.LogWarning("column_mismatch", 
+                        "Skipping row with " + row.Count + " columns (expected " + expectedColumnCount + "): " + 
+                        string.Join(", ", row.Take(5)) + (row.Count > 5 ? "..." : ""));
+                    skippedRows++;
+                    continue;
+                }
+
                 var values = row.Select(v => "'" + v.Replace("'", "''") + "'").ToList(); // Escape single quotes
                 var headerColumns = string.Join(", ", headers.Select(h => "[" + h + "]"));
                 var insertSql = "INSERT INTO " + fullTableName + " (" + headerColumns + ") VALUES (" + string.Join(", ", values) + ")";
@@ -132,6 +169,11 @@ namespace ReferenceDataApi.Services
                     _logger.LogError("insert_error", "Failed to insert row: " + ex.Message);
                     // Continue with other rows
                 }
+            }
+
+            if (skippedRows > 0)
+            {
+                _logger.LogWarning("rows_skipped", "Skipped " + skippedRows + " rows due to column count mismatch");
             }
         }
     }

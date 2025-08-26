@@ -26,5 +26,6 @@ namespace ReferenceDataApi.Infrastructure
         List<Dictionary<string, object>> GetReferenceDataConfig();
         List<Dictionary<string, object>> GetAllTablesWithSchemas();
         Dictionary<string, object> VerifyLoadType(string filename, string loadMode);
+        List<BackupInfo> GetBackupTables(string tableFilter = null);
     }
 }
