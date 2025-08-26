@@ -30,7 +30,8 @@
       "mcp__playwright__browser_close",
       "mcp__playwright__browser_install",
       "Bash(pkill:*)",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "Bash(node:*)"
     ],
     "deny": []
   }
