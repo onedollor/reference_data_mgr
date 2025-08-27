@@ -47,7 +47,12 @@
       "Bash(sed:*)",
       "Bash(export PATH=$HOME/.dotnet:$PATH)",
       "Bash(DOTNET_ENVIRONMENT=Development ./ReferenceDataApi --urls http://0.0.0.0:8000)",
-      "Bash(DOTNET_ENVIRONMENT=Development dotnet ReferenceDataApi.dll --urls http://0.0.0.0:8000)"
+      "Bash(DOTNET_ENVIRONMENT=Development dotnet ReferenceDataApi.dll --urls http://0.0.0.0:8000)",
+      "Bash(export DB_HOST=\"LIN9400F\\SQL2ETL\")",
+      "Bash(export SERVER_HOST=\"LIN9400F\\SQL2ETL\")",
+      "Bash(export DB_HOST=\"localhost\\SQL2ETL\")",
+      "Bash(dotnet new:*)",
+      "Bash(dotnet add package:*)"
     ],
     "deny": [],
     "additionalDirectories": [

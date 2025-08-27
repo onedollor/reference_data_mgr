@@ -1,0 +1,274 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Code\\reference_data_mgr\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Code\\reference_data_mgr\\obj\\project.assets.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:obj\\project.assets.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Code\\reference_data_mgr\\package.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:package.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\packages.config||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:backend_dotnet\\ReferenceDataApi\\packages.config||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\ReferenceDataApi.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:backend_dotnet\\ReferenceDataApi\\ReferenceDataApi.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\Controllers\\ReferenceDataController.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:backend_dotnet\\ReferenceDataApi\\Controllers\\ReferenceDataController.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\App_Start\\WebApiConfig.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:backend_dotnet\\ReferenceDataApi\\App_Start\\WebApiConfig.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Code\\reference_data_mgr\\backend_dotnet\\DEPLOYMENT_GUIDE.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}|",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:backend_dotnet\\DEPLOYMENT_GUIDE.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}|"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Code\\reference_data_mgr\\backend_dotnet\\README.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:backend_dotnet\\README.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\Controllers\\TestController.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:backend_dotnet\\ReferenceDataApi\\Controllers\\TestController.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\Program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:backend_dotnet\\ReferenceDataApi\\Program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\Global.asax.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:backend_dotnet\\ReferenceDataApi\\Global.asax.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\Infrastructure\\DatabaseManager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:backend_dotnet\\ReferenceDataApi\\Infrastructure\\DatabaseManager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Code\\reference_data_mgr\\backend_dotnet\\BUILD_SUCCESS.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}|",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:backend_dotnet\\BUILD_SUCCESS.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}|"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Code\\reference_data_mgr\\backend_dotnet\\SYSTEM_WEB_ADDED.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}|",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:backend_dotnet\\SYSTEM_WEB_ADDED.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}|"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Code\\reference_data_mgr\\test_system.ps1||{3B902123-F8A7-4915-9F01-361F908088D0}|",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:test_system.ps1||{3B902123-F8A7-4915-9F01-361F908088D0}|"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 3,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 14,
+              "Title": "test_system.ps1",
+              "DocumentMoniker": "C:\\Code\\reference_data_mgr\\test_system.ps1",
+              "RelativeDocumentMoniker": "test_system.ps1",
+              "ToolTip": "C:\\Code\\reference_data_mgr\\test_system.ps1",
+              "RelativeToolTip": "test_system.ps1",
+              "ViewState": "AgIAAIMAAAAAAAAAAABBwIQAAABBAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-08-27T17:04:13.699Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 13,
+              "Title": "SYSTEM_WEB_ADDED.md",
+              "DocumentMoniker": "C:\\Code\\reference_data_mgr\\backend_dotnet\\SYSTEM_WEB_ADDED.md",
+              "RelativeDocumentMoniker": "backend_dotnet\\SYSTEM_WEB_ADDED.md",
+              "ToolTip": "C:\\Code\\reference_data_mgr\\backend_dotnet\\SYSTEM_WEB_ADDED.md",
+              "RelativeToolTip": "backend_dotnet\\SYSTEM_WEB_ADDED.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAADIAAABbAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2025-08-27T16:59:54.541Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 12,
+              "Title": "BUILD_SUCCESS.md",
+              "DocumentMoniker": "C:\\Code\\reference_data_mgr\\backend_dotnet\\BUILD_SUCCESS.md",
+              "RelativeDocumentMoniker": "backend_dotnet\\BUILD_SUCCESS.md",
+              "ToolTip": "C:\\Code\\reference_data_mgr\\backend_dotnet\\BUILD_SUCCESS.md",
+              "RelativeToolTip": "backend_dotnet\\BUILD_SUCCESS.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAADsAAAA9AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2025-08-27T16:57:50.071Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "project.assets.json",
+              "DocumentMoniker": "C:\\Code\\reference_data_mgr\\obj\\project.assets.json",
+              "RelativeDocumentMoniker": "obj\\project.assets.json",
+              "ToolTip": "C:\\Code\\reference_data_mgr\\obj\\project.assets.json",
+              "RelativeToolTip": "obj\\project.assets.json",
+              "ViewState": "AgIAAC4AAAAAAAAAAAAuwD4AAAAKAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2025-08-27T16:56:50.463Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 11,
+              "Title": "DatabaseManager.cs",
+              "DocumentMoniker": "C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\Infrastructure\\DatabaseManager.cs",
+              "RelativeDocumentMoniker": "backend_dotnet\\ReferenceDataApi\\Infrastructure\\DatabaseManager.cs",
+              "ToolTip": "C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\Infrastructure\\DatabaseManager.cs",
+              "RelativeToolTip": "backend_dotnet\\ReferenceDataApi\\Infrastructure\\DatabaseManager.cs",
+              "ViewState": "AgIAANIAAAAAAAAAAABBwAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-08-27T16:56:33.105Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
+              "Title": "Global.asax.cs",
+              "DocumentMoniker": "C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\Global.asax.cs",
+              "RelativeDocumentMoniker": "backend_dotnet\\ReferenceDataApi\\Global.asax.cs",
+              "ToolTip": "C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\Global.asax.cs",
+              "RelativeToolTip": "backend_dotnet\\ReferenceDataApi\\Global.asax.cs",
+              "ViewState": "AgIAABYAAAAAAAAAAIBJwAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-08-27T16:55:53.917Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "Program.cs",
+              "DocumentMoniker": "C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\Program.cs",
+              "RelativeDocumentMoniker": "backend_dotnet\\ReferenceDataApi\\Program.cs",
+              "ToolTip": "C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\Program.cs",
+              "RelativeToolTip": "backend_dotnet\\ReferenceDataApi\\Program.cs",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-08-27T16:55:23.246Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "TestController.cs",
+              "DocumentMoniker": "C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\Controllers\\TestController.cs",
+              "RelativeDocumentMoniker": "backend_dotnet\\ReferenceDataApi\\Controllers\\TestController.cs",
+              "ToolTip": "C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\Controllers\\TestController.cs",
+              "RelativeToolTip": "backend_dotnet\\ReferenceDataApi\\Controllers\\TestController.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-08-27T16:53:10.556Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "README.md",
+              "DocumentMoniker": "C:\\Code\\reference_data_mgr\\backend_dotnet\\README.md",
+              "RelativeDocumentMoniker": "backend_dotnet\\README.md",
+              "ToolTip": "C:\\Code\\reference_data_mgr\\backend_dotnet\\README.md",
+              "RelativeToolTip": "backend_dotnet\\README.md",
+              "ViewState": "AgIAAKYAAAAAAAAAAIBJwAEAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2025-08-27T16:44:12.967Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "package.json",
+              "DocumentMoniker": "C:\\Code\\reference_data_mgr\\package.json",
+              "RelativeDocumentMoniker": "package.json",
+              "ToolTip": "C:\\Code\\reference_data_mgr\\package.json",
+              "RelativeToolTip": "package.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2025-08-27T16:40:02.776Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "ReferenceDataApi.csproj",
+              "DocumentMoniker": "C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\ReferenceDataApi.csproj",
+              "RelativeDocumentMoniker": "backend_dotnet\\ReferenceDataApi\\ReferenceDataApi.csproj",
+              "ToolTip": "C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\ReferenceDataApi.csproj",
+              "RelativeToolTip": "backend_dotnet\\ReferenceDataApi\\ReferenceDataApi.csproj",
+              "ViewState": "AgIAACQAAAAAAAAAAABBwAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
+              "WhenOpened": "2025-08-27T16:41:09.108Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "ReferenceDataController.cs",
+              "DocumentMoniker": "C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\Controllers\\ReferenceDataController.cs",
+              "RelativeDocumentMoniker": "backend_dotnet\\ReferenceDataApi\\Controllers\\ReferenceDataController.cs",
+              "ToolTip": "C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\Controllers\\ReferenceDataController.cs",
+              "RelativeToolTip": "backend_dotnet\\ReferenceDataApi\\Controllers\\ReferenceDataController.cs",
+              "ViewState": "AgIAAJYAAAAAAAAAAABBwAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-08-27T16:41:51.31Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "WebApiConfig.cs",
+              "DocumentMoniker": "C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\App_Start\\WebApiConfig.cs",
+              "RelativeDocumentMoniker": "backend_dotnet\\ReferenceDataApi\\App_Start\\WebApiConfig.cs",
+              "ToolTip": "C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\App_Start\\WebApiConfig.cs",
+              "RelativeToolTip": "backend_dotnet\\ReferenceDataApi\\App_Start\\WebApiConfig.cs",
+              "ViewState": "AgIAAD0AAAAAAAAAAABRwAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-08-27T16:42:03.886Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "DEPLOYMENT_GUIDE.md",
+              "DocumentMoniker": "C:\\Code\\reference_data_mgr\\backend_dotnet\\DEPLOYMENT_GUIDE.md",
+              "RelativeDocumentMoniker": "backend_dotnet\\DEPLOYMENT_GUIDE.md",
+              "ToolTip": "C:\\Code\\reference_data_mgr\\backend_dotnet\\DEPLOYMENT_GUIDE.md",
+              "RelativeToolTip": "backend_dotnet\\DEPLOYMENT_GUIDE.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAKkAAACZAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2025-08-27T16:43:39.448Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "packages.config",
+              "DocumentMoniker": "C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\packages.config",
+              "RelativeDocumentMoniker": "backend_dotnet\\ReferenceDataApi\\packages.config",
+              "ToolTip": "C:\\Code\\reference_data_mgr\\backend_dotnet\\ReferenceDataApi\\packages.config",
+              "RelativeToolTip": "backend_dotnet\\ReferenceDataApi\\packages.config",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000601|",
+              "WhenOpened": "2025-08-27T16:40:36.054Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,63 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <configSections>
+  </configSections>
+  
+  <connectionStrings>
+    <add name="DefaultConnection" connectionString="Server=LIN9400F\SQL2ETL;Database=test;Integrated Security=false;User ID=tester;Password=121@abc!;TrustServerCertificate=true;Connection Timeout=30;" />
+  </connectionStrings>
+  
+  <appSettings>
+    <add key="DataSchema" value="ref" />
+    <add key="BackupSchema" value="bkp" />
+    <add key="PostloadStoredProcedure" value="sp_ref_postload" />
+    <add key="Host" value="localhost" />
+    <add key="HttpPort" value="8000" />
+    <add key="HttpsPort" value="8001" />
+  </appSettings>
+  
+  <system.web>
+    <compilation debug="true" targetFramework="4.0" />
+    <httpRuntime targetFramework="4.0" maxRequestLength="51200" executionTimeout="300" />
+    <httpModules>
+      <add name="ApplicationInsightsWebTracking" type="Microsoft.ApplicationInsights.Web.ApplicationInsightsHttpModule, Microsoft.AI.Web" />
+    </httpModules>
+  </system.web>
+  
+  <system.webServer>
+    <handlers>
+      <remove name="ExtensionlessUrlHandler-Integrated-4.0" />
+      <remove name="OPTIONSVerbHandler" />
+      <remove name="TRACEVerbHandler" />
+      <add name="ExtensionlessUrlHandler-Integrated-4.0" path="*." verb="*" type="System.Web.Handlers.TransferRequestHandler" preCondition="integratedMode,runtimeVersionv4.0" />
+    </handlers>
+    <modules>
+      <remove name="ApplicationInsightsWebTracking" />
+      <add name="ApplicationInsightsWebTracking" type="Microsoft.ApplicationInsights.Web.ApplicationInsightsHttpModule, Microsoft.AI.Web" preCondition="managedHandler" />
+    </modules>
+    <validation validateIntegratedModeConfiguration="false" />
+    <defaultDocument>
+      <files>
+        <clear />
+        <add value="default.htm" />
+      </files>
+    </defaultDocument>
+  </system.webServer>
+  
+  <runtime>
+    <assemblyBinding xmlns="urn:schemas-microsoft-com:asm.v1">
+      <dependentAssembly>
+        <assemblyIdentity name="Newtonsoft.Json" culture="neutral" publicKeyToken="30ad4fe6b2a6aeed" />
+        <bindingRedirect oldVersion="0.0.0.0-4.5.0.0" newVersion="4.5.0.0" />
+      </dependentAssembly>
+      <dependentAssembly>
+        <assemblyIdentity name="System.Web.Http" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-5.2.3.0" newVersion="5.2.3.0" />
+      </dependentAssembly>
+      <dependentAssembly>
+        <assemblyIdentity name="System.Net.Http.Formatting" publicKeyToken="31bf3856ad364e35" />
+        <bindingRedirect oldVersion="0.0.0.0-5.2.3.0" newVersion="5.2.3.0" />
+      </dependentAssembly>
+    </assemblyBinding>
+  </runtime>
+</configuration>

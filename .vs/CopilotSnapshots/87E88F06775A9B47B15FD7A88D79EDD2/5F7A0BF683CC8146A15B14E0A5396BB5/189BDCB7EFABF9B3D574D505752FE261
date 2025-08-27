@@ -1,0 +1,152 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Configuration;
+using System.Data.SqlClient;
+using System.Web.Http;
+using System.Web.Http.Cors;
+using ReferenceDataApi.Infrastructure;
+using ReferenceDataApi.Models;
+
+namespace ReferenceDataApi.Controllers
+{
+    [EnableCors(origins: "*", headers: "*", methods: "*")]
+    public class ReferenceDataController : ApiController
+    {
+        private readonly IDatabaseManager _databaseManager;
+
+        public ReferenceDataController()
+        {
+            _databaseManager = new DatabaseManager();
+        }
+
+        // GET api/referencedata
+        public ApiResponse<ApiInfo> Get()
+        {
+            try
+            {
+                var info = new ApiInfo
+                {
+                    Title = "Reference Data Management API",
+                    Version = "1.0.0",
+                    Description = "ASP.NET Web API for Reference Data Management - .NET Framework 4.7.2 Compatible",
+                    ServerTime = DateTime.Now
+                };
+
+                return ApiResponse<ApiInfo>.SuccessResult(info);
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse<ApiInfo>.ErrorResult(ex.Message);
+            }
+        }
+
+        // GET api/referencedata/health
+        public ApiResponse<DatabaseHealth> GetHealth()
+        {
+            try
+            {
+                var connectionString = ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
+                var health = new DatabaseHealth();
+
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+                    health.IsConnected = true;
+                    health.ServerVersion = connection.ServerVersion;
+                    health.Database = connection.Database;
+                    health.DataSource = connection.DataSource;
+                }
+
+                return ApiResponse<DatabaseHealth>.SuccessResult(health);
+            }
+            catch (Exception ex)
+            {
+                var health = new DatabaseHealth
+                {
+                    IsConnected = false
+                };
+                return ApiResponse<DatabaseHealth>.ErrorResult("Database connection failed: " + ex.Message);
+            }
+        }
+
+        // GET api/referencedata/config
+        public ApiResponse<SystemConfiguration> GetConfig()
+        {
+            try
+            {
+                var config = new SystemConfiguration
+                {
+                    DataSchema = ConfigurationManager.AppSettings["DataSchema"] ?? "ref",
+                    BackupSchema = ConfigurationManager.AppSettings["BackupSchema"] ?? "bkp",
+                    PostloadStoredProcedure = ConfigurationManager.AppSettings["PostloadStoredProcedure"] ?? "sp_ref_postload",
+                    Host = ConfigurationManager.AppSettings["Host"] ?? "localhost",
+                    HttpPort = ConfigurationManager.AppSettings["HttpPort"] ?? "8000",
+                    HttpsPort = ConfigurationManager.AppSettings["HttpsPort"] ?? "8001"
+                };
+
+                return ApiResponse<SystemConfiguration>.SuccessResult(config);
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse<SystemConfiguration>.ErrorResult(ex.Message);
+            }
+        }
+
+        // GET api/referencedata/schemas
+        public ApiResponse<List<string>> GetSchemas()
+        {
+            try
+            {
+                var schemas = _databaseManager.GetSchemas();
+                return ApiResponse<List<string>>.SuccessResult(schemas);
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse<List<string>>.ErrorResult(ex.Message);
+            }
+        }
+
+        // GET api/referencedata/tables/{schemaName}
+        public ApiResponse<List<string>> GetTables(string schemaName)
+        {
+            try
+            {
+                var tables = _databaseManager.GetTables(schemaName);
+                return ApiResponse<List<string>>.SuccessResult(tables);
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse<List<string>>.ErrorResult(ex.Message);
+            }
+        }
+
+        // GET api/referencedata/columns/{schemaName}/{tableName}
+        public ApiResponse<Dictionary<string, string>> GetColumns(string schemaName, string tableName)
+        {
+            try
+            {
+                var columns = _databaseManager.GetTableColumns(schemaName, tableName);
+                return ApiResponse<Dictionary<string, string>>.SuccessResult(columns);
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse<Dictionary<string, string>>.ErrorResult(ex.Message);
+            }
+        }
+
+        // GET api/referencedata/test
+        public ApiResponse<string> GetTest()
+        {
+            try
+            {
+                var isConnected = _databaseManager.TestConnection();
+                var message = isConnected ? "Database connection successful" : "Database connection failed";
+                return ApiResponse<string>.SuccessResult(message);
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse<string>.ErrorResult(ex.Message);
+            }
+        }
+    }
+}

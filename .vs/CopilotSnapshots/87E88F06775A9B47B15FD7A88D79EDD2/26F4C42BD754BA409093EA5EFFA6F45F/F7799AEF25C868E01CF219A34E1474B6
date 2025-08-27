@@ -1,0 +1,169 @@
+﻿# Reference Data API - ASP.NET Web API Backend
+
+This is the ASP.NET Web API version of the Python FastAPI backend, converted for deployment on IIS 10 with .NET Framework 4.7.2.
+
+## System Requirements
+
+- .NET Framework 4.7.2 or higher
+- IIS 10 (Windows Server 2016+ or Windows 10+)
+- SQL Server with proper connectivity
+- Visual Studio 2022 (for development)
+
+## Project Structure
+
+```
+backend_dotnet/
+├── ReferenceDataApi/
+│   ├── App_Start/              # Web API configuration
+│   │   └── WebApiConfig.cs
+│   ├── Controllers/            # API endpoints
+│   │   └── ReferenceDataController.cs
+│   ├── Infrastructure/         # Database layer
+│   │   ├── IDatabaseManager.cs
+│   │   └── DatabaseManager.cs
+│   ├── Models/                 # Data models and API responses
+│   │   └── ApiModels.cs
+│   ├── Properties/             # Assembly information
+│   │   └── AssemblyInfo.cs
+│   ├── Global.asax            # Application lifecycle
+│   ├── Global.asax.cs         # Application startup code
+│   ├── Web.config             # IIS configuration
+│   └── ReferenceDataApi.csproj # Project file
+├── ReferenceDataManager.sln   # Solution file
+└── DEPLOYMENT_GUIDE.md        # Detailed deployment instructions
+```
+
+## Configuration
+
+The application uses Web.config for configuration. Update the connection string to match your SQL Server:
+
+```xml
+<connectionStrings>
+  <add name="DefaultConnection" 
+       connectionString="Server=LIN9400F\SQL2ETL;Database=test;Integrated Security=false;User ID=tester;Password=121@abc!;TrustServerCertificate=true;Connection Timeout=30;" />
+</connectionStrings>
+```
+
+### Application Settings
+
+```xml
+<appSettings>
+  <add key="DataSchema" value="ref" />
+  <add key="BackupSchema" value="bkp" />
+  <add key="PostloadStoredProcedure" value="sp_ref_postload" />
+  <add key="Host" value="localhost" />
+  <add key="HttpPort" value="8000" />
+  <add key="HttpsPort" value="8001" />
+</appSettings>
+```
+
+## Build and Run
+
+### Development (Visual Studio)
+1. Open `ReferenceDataManager.sln` in Visual Studio 2022
+2. Restore NuGet packages (should happen automatically)
+3. Build the solution (Ctrl+Shift+B)
+4. Run with IIS Express (F5)
+
+### Command Line Build
+```bash
+# From backend_dotnet directory
+dotnet restore ReferenceDataManager.sln
+dotnet build ReferenceDataManager.sln --configuration Release
+```
+
+The API will be available at `http://localhost:8000` (development) or your configured IIS site.
+
+## API Endpoints
+
+### Core Endpoints
+- `GET /api/referencedata` - API information and status
+- `GET /api/referencedata/health` - Database health check
+- `GET /api/referencedata/config` - System configuration
+- `GET /api/referencedata/test` - Database connection test
+
+### Data Endpoints
+- `GET /api/referencedata/schemas` - Available database schemas
+- `GET /api/referencedata/tables/{schemaName}` - Tables in specified schema
+- `GET /api/referencedata/columns/{schemaName}/{tableName}` - Columns in specified table
+
+## IIS 10 Deployment
+
+### Quick Deployment Steps
+
+1. **Build the project** in Release mode
+2. **Create IIS Application Pool** targeting .NET Framework v4.0
+3. **Create IIS Application** pointing to your deployment folder
+4. **Copy deployment files**:
+   - All compiled assemblies (bin/ folder)
+   - Web.config
+   - Global.asax
+   - Any content files
+
+### Application Pool Configuration
+- **.NET Framework Version**: v4.0 (compatible with 4.7.2)
+- **Managed Pipeline Mode**: Integrated
+- **Identity**: ApplicationPoolIdentity (or custom account with DB access)
+
+### Required IIS Features
+- IIS-WebServerRole
+- IIS-ASPNET45
+- IIS-HttpRedirect (for URL rewriting)
+
+## Key Differences from Python Version
+
+| Feature | Python FastAPI | .NET Web API |
+|---------|----------------|--------------|
+| **Runtime** | Python + Uvicorn | .NET Framework + IIS |
+| **Database** | async ODBC | System.Data.SqlClient |
+| **Routing** | @app.get() decorators | Conventional routing |
+| **Models** | Pydantic classes | C# classes with Newtonsoft.Json |
+| **CORS** | FastAPI CORS middleware | Web API CORS attributes |
+| **Configuration** | Environment variables | Web.config appSettings |
+
+## .NET Framework 4.7.2 Compatibility Features
+
+This implementation maintains compatibility with older .NET Framework while providing modern Web API functionality:
+
+- **Synchronous Operations**: All database operations use traditional sync patterns
+- **Traditional Dependency Injection**: Manual service registration in Global.asax
+- **Classic Project Format**: MSBuild project file (not SDK-style)
+- **Package References**: Compatible Web API and JSON.NET versions
+- **Error Handling**: Structured exception handling with detailed error responses
+
+## Development Notes
+
+- **Connection String**: Uses the same format as your DatabaseTest.cs for consistency
+- **JSON Serialization**: Configured for camelCase property names
+- **CORS**: Enabled for cross-origin requests (configure origins for production)
+- **Routing**: Uses conventional routing for maximum compatibility
+- **Error Responses**: Consistent ApiResponse<T> wrapper for all endpoints
+
+## Security Considerations
+
+- **SQL Injection Protection**: All database queries use parameterized statements
+- **Connection String Security**: Consider using encrypted configuration sections for production
+- **CORS Policy**: Restrict origins in production environments
+- **Authentication**: Framework ready for Windows Authentication or custom schemes
+
+## Troubleshooting
+
+1. **Build Errors**: Ensure .NET Framework 4.7.2 Developer Pack is installed
+2. **Runtime Errors**: Check Windows Event Log and IIS logs
+3. **Database Connectivity**: Verify SQL Server accessibility and credentials
+4. **Missing Assemblies**: Ensure all NuGet packages are restored properly
+
+For detailed deployment instructions and troubleshooting, see [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md).
+
+## Future Enhancements
+
+The current implementation provides a solid foundation. Potential improvements include:
+
+1. **Authentication & Authorization**: Windows Auth or JWT tokens
+2. **Logging**: Structured logging with NLog or Serilog  
+3. **Caching**: Output caching for frequently accessed data
+4. **Health Checks**: Comprehensive health monitoring endpoints
+5. **API Documentation**: Swagger/OpenAPI documentation generation
+6. **Performance**: Async/await patterns (if targeting newer .NET Framework versions)
+
+This codebase is production-ready for IIS 10 deployment and maintains full compatibility with your existing SQL Server infrastructure.

@@ -1,0 +1,5 @@
+is_global = true
+build_property.RootNamespace = ReferenceDataApi
+build_property.ProjectDir = /mnt/c/Code/reference_data_mgr/backend_dotnet/ReferenceDataApi/
+build_property.EnableComHosting = 
+build_property.EnableGeneratedComInterfaceComImportInterop = 

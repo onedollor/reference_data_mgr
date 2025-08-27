@@ -1,15 +1,25 @@
 using System;
 using System.Web;
 using System.Web.Http;
-using System.Web.Routing;
 
 namespace ReferenceDataApi
 {
-    public class WebApiApplication : HttpApplication
+    public class Global : HttpApplication
     {
         protected void Application_Start()
         {
             GlobalConfiguration.Configure(WebApiConfig.Register);
+        }
+
+        protected void Application_Error()
+        {
+            var exception = Server.GetLastError();
+            // Log the exception here if needed
+        }
+
+        protected void Application_End()
+        {
+            // Application cleanup code here
         }
     }
 }

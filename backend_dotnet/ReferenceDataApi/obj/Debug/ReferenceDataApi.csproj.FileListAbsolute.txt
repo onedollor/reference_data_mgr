@@ -1,0 +1,2 @@
+C:\Code\reference_data_mgr\backend_dotnet\ReferenceDataApi\obj\Debug\ReferenceDataApi.csproj.AssemblyReference.cache
+C:\Code\reference_data_mgr\backend_dotnet\ReferenceDataApi\obj\Debug\ReferenceDataApi.csproj.CoreCompileInputs.cache

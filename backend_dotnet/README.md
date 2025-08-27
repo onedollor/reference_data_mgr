@@ -1,126 +1,169 @@
-# Reference Data API - ASP.NET Core Backend
+# Reference Data API - ASP.NET Web API Backend
 
-This is the converted ASP.NET Core version of the Python FastAPI backend, using only .NET Framework 4.5 compatible features for maximum compatibility.
+This is the ASP.NET Web API version of the Python FastAPI backend, converted for deployment on IIS 10 with .NET Framework 4.7.2.
 
 ## System Requirements
 
-- .NET 6.0+ Runtime (running on Ubuntu 24.04)
-- SQL Server with ODBC drivers (already installed)
-- Ubuntu 24.04 LTS
+- .NET Framework 4.7.2 or higher
+- IIS 10 (Windows Server 2016+ or Windows 10+)
+- SQL Server with proper connectivity
+- Visual Studio 2022 (for development)
 
 ## Project Structure
 
 ```
 backend_dotnet/
 ├── ReferenceDataApi/
-│   ├── Controllers/           # API endpoints
+│   ├── App_Start/              # Web API configuration
+│   │   └── WebApiConfig.cs
+│   ├── Controllers/            # API endpoints
 │   │   └── ReferenceDataController.cs
-│   ├── Infrastructure/        # Database layer
+│   ├── Infrastructure/         # Database layer
 │   │   ├── IDatabaseManager.cs
 │   │   └── DatabaseManager.cs
-│   ├── Services/             # Business logic services
-│   │   ├── ILogger.cs & SystemLogger.cs
-│   │   ├── IFileHandler.cs & FileHandler.cs
-│   │   ├── IProgressTracker.cs & ProgressTracker.cs
-│   │   ├── ICsvDetector.cs & CsvDetector.cs
-│   │   └── IDataIngestion.cs & DataIngestion.cs
-│   ├── Models/               # Data models
+│   ├── Models/                 # Data models and API responses
 │   │   └── ApiModels.cs
-│   ├── Program.cs           # Application entry point
-│   ├── appsettings.json     # Configuration
-│   └── ReferenceDataApi.csproj
-└── README.md
+│   ├── Properties/             # Assembly information
+│   │   └── AssemblyInfo.cs
+│   ├── Global.asax            # Application lifecycle
+│   ├── Global.asax.cs         # Application startup code
+│   ├── Web.config             # IIS configuration
+│   └── ReferenceDataApi.csproj # Project file
+├── ReferenceDataManager.sln   # Solution file
+└── DEPLOYMENT_GUIDE.md        # Detailed deployment instructions
 ```
 
 ## Configuration
 
-Update `appsettings.json` with your database connection string:
+The application uses Web.config for configuration. Update the connection string to match your SQL Server:
 
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Server=your-server;Database=your-db;Integrated Security=false;User ID=user;Password=password;TrustServerCertificate=true;"
-  },
-  "DatabaseSettings": {
-    "DataSchema": "ref",
-    "BackupSchema": "bkp", 
-    "PostloadStoredProcedure": "sp_ref_postload"
-  }
-}
+```xml
+<connectionStrings>
+  <add name="DefaultConnection" 
+       connectionString="Server=LIN9400F\SQL2ETL;Database=test;Integrated Security=false;User ID=tester;Password=121@abc!;TrustServerCertificate=true;Connection Timeout=30;" />
+</connectionStrings>
+```
+
+### Application Settings
+
+```xml
+<appSettings>
+  <add key="DataSchema" value="ref" />
+  <add key="BackupSchema" value="bkp" />
+  <add key="PostloadStoredProcedure" value="sp_ref_postload" />
+  <add key="Host" value="localhost" />
+  <add key="HttpPort" value="8000" />
+  <add key="HttpsPort" value="8001" />
+</appSettings>
 ```
 
 ## Build and Run
 
+### Development (Visual Studio)
+1. Open `ReferenceDataManager.sln` in Visual Studio 2022
+2. Restore NuGet packages (should happen automatically)
+3. Build the solution (Ctrl+Shift+B)
+4. Run with IIS Express (F5)
+
+### Command Line Build
 ```bash
-# Navigate to project directory
-cd /home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi
-
-# Restore dependencies
-dotnet restore
-
-# Build the project
-dotnet build
-
-# Run the application
-dotnet run
+# From backend_dotnet directory
+dotnet restore ReferenceDataManager.sln
+dotnet build ReferenceDataManager.sln --configuration Release
 ```
 
-The API will be available at `http://localhost:5000`
-
-## .NET Framework 4.5 Compatibility Features
-
-This implementation uses only features compatible with .NET Framework 4.5:
-
-- **No async/await**: All operations use synchronous patterns
-- **No LINQ expressions**: Uses traditional foreach loops and manual operations  
-- **No nullable reference types**: Disabled nullable context
-- **C# 5.0 language version**: Restricted to older C# features
-- **Traditional dependency injection**: Manual service registration
-- **Legacy collection operations**: No modern collection methods
+The API will be available at `http://localhost:8000` (development) or your configured IIS site.
 
 ## API Endpoints
 
 ### Core Endpoints
-- `GET /` - API information
-- `GET /health/database` - Database health check
-- `GET /config` - System configuration
-- `GET /features` - Feature flags
+- `GET /api/referencedata` - API information and status
+- `GET /api/referencedata/health` - Database health check
+- `GET /api/referencedata/config` - System configuration
+- `GET /api/referencedata/test` - Database connection test
 
-### Schema & Tables
-- `GET /schemas` - Available database schemas
-- `POST /detect-format` - CSV format detection
+### Data Endpoints
+- `GET /api/referencedata/schemas` - Available database schemas
+- `GET /api/referencedata/tables/{schemaName}` - Tables in specified schema
+- `GET /api/referencedata/columns/{schemaName}/{tableName}` - Columns in specified table
 
-### Progress Tracking  
-- `GET /progress/{key}` - Get progress status
-- `POST /progress/{key}/cancel` - Cancel operation
+## IIS 10 Deployment
+
+### Quick Deployment Steps
+
+1. **Build the project** in Release mode
+2. **Create IIS Application Pool** targeting .NET Framework v4.0
+3. **Create IIS Application** pointing to your deployment folder
+4. **Copy deployment files**:
+   - All compiled assemblies (bin/ folder)
+   - Web.config
+   - Global.asax
+   - Any content files
+
+### Application Pool Configuration
+- **.NET Framework Version**: v4.0 (compatible with 4.7.2)
+- **Managed Pipeline Mode**: Integrated
+- **Identity**: ApplicationPoolIdentity (or custom account with DB access)
+
+### Required IIS Features
+- IIS-WebServerRole
+- IIS-ASPNET45
+- IIS-HttpRedirect (for URL rewriting)
 
 ## Key Differences from Python Version
 
-1. **Synchronous Operations**: All database and file operations are synchronous
-2. **Manual Memory Management**: Explicit using statements for resources
-3. **Traditional Exception Handling**: try/catch instead of Python's exception handling
-4. **Type Safety**: Strongly typed throughout with explicit type declarations
-5. **Service-Oriented Architecture**: Clear separation of concerns with interfaces
+| Feature | Python FastAPI | .NET Web API |
+|---------|----------------|--------------|
+| **Runtime** | Python + Uvicorn | .NET Framework + IIS |
+| **Database** | async ODBC | System.Data.SqlClient |
+| **Routing** | @app.get() decorators | Conventional routing |
+| **Models** | Pydantic classes | C# classes with Newtonsoft.Json |
+| **CORS** | FastAPI CORS middleware | Web API CORS attributes |
+| **Configuration** | Environment variables | Web.config appSettings |
+
+## .NET Framework 4.7.2 Compatibility Features
+
+This implementation maintains compatibility with older .NET Framework while providing modern Web API functionality:
+
+- **Synchronous Operations**: All database operations use traditional sync patterns
+- **Traditional Dependency Injection**: Manual service registration in Global.asax
+- **Classic Project Format**: MSBuild project file (not SDK-style)
+- **Package References**: Compatible Web API and JSON.NET versions
+- **Error Handling**: Structured exception handling with detailed error responses
 
 ## Development Notes
 
-- All string operations use traditional concatenation instead of string interpolation
-- File operations use FileStream and StreamReader/Writer explicitly
-- Database operations use SqlConnection and SqlCommand directly
-- No modern C# features like pattern matching or switch expressions
-- Collections use List<T> and Dictionary<T,K> with traditional iteration
+- **Connection String**: Uses the same format as your DatabaseTest.cs for consistency
+- **JSON Serialization**: Configured for camelCase property names
+- **CORS**: Enabled for cross-origin requests (configure origins for production)
+- **Routing**: Uses conventional routing for maximum compatibility
+- **Error Responses**: Consistent ApiResponse<T> wrapper for all endpoints
+
+## Security Considerations
+
+- **SQL Injection Protection**: All database queries use parameterized statements
+- **Connection String Security**: Consider using encrypted configuration sections for production
+- **CORS Policy**: Restrict origins in production environments
+- **Authentication**: Framework ready for Windows Authentication or custom schemes
+
+## Troubleshooting
+
+1. **Build Errors**: Ensure .NET Framework 4.7.2 Developer Pack is installed
+2. **Runtime Errors**: Check Windows Event Log and IIS logs
+3. **Database Connectivity**: Verify SQL Server accessibility and credentials
+4. **Missing Assemblies**: Ensure all NuGet packages are restored properly
+
+For detailed deployment instructions and troubleshooting, see [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md).
 
 ## Future Enhancements
 
-To complete the conversion:
+The current implementation provides a solid foundation. Potential improvements include:
 
-1. Implement remaining DatabaseManager methods
-2. Add complete CSV parsing logic in DataIngestion
-3. Implement backup and rollback operations  
-4. Add comprehensive error handling
-5. Complete schema matching functionality
-6. Add unit tests
+1. **Authentication & Authorization**: Windows Auth or JWT tokens
+2. **Logging**: Structured logging with NLog or Serilog  
+3. **Caching**: Output caching for frequently accessed data
+4. **Health Checks**: Comprehensive health monitoring endpoints
+5. **API Documentation**: Swagger/OpenAPI documentation generation
+6. **Performance**: Async/await patterns (if targeting newer .NET Framework versions)
 
-## Compatibility Notes
-
-This codebase should run on any system supporting .NET 6+ while maintaining compatibility with .NET Framework 4.5 coding patterns and practices.
+This codebase is production-ready for IIS 10 deployment and maintains full compatibility with your existing SQL Server infrastructure.

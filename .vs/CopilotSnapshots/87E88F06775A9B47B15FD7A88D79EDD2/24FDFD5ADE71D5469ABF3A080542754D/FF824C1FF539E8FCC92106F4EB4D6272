@@ -1,0 +1,212 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Configuration;
+using System.Data;
+using System.Data.SqlClient;
+
+namespace ReferenceDataApi.Infrastructure
+{
+    public class DatabaseManager : IDatabaseManager
+    {
+        private readonly string _connectionString;
+
+        public DatabaseManager()
+        {
+            _connectionString = ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
+        }
+
+        public bool TestConnection()
+        {
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+                    return true;
+                }
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        public List<string> GetSchemas()
+        {
+            var schemas = new List<string>();
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+                    using (var command = new SqlCommand("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME NOT IN ('db_owner', 'db_accessadmin', 'db_securityadmin', 'db_ddladmin', 'db_backupoperator', 'db_datareader', 'db_datawriter', 'db_denydatareader', 'db_denydatawriter', 'sys', 'information_schema')", connection))
+                    {
+                        using (var reader = command.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                schemas.Add(reader.GetString(0));
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Log exception if needed
+            }
+            return schemas;
+        }
+
+        public List<string> GetTables(string schema)
+        {
+            var tables = new List<string>();
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+                    var query = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = @schema AND TABLE_TYPE = 'BASE TABLE'";
+                    using (var command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@schema", schema);
+                        using (var reader = command.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                tables.Add(reader.GetString(0));
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Log exception if needed
+            }
+            return tables;
+        }
+
+        public DataTable ExecuteQuery(string query)
+        {
+            var dataTable = new DataTable();
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+                    using (var command = new SqlCommand(query, connection))
+                    {
+                        using (var adapter = new SqlDataAdapter(command))
+                        {
+                            adapter.Fill(dataTable);
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Log exception if needed
+            }
+            return dataTable;
+        }
+
+        public int ExecuteNonQuery(string query)
+        {
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+                    using (var command = new SqlCommand(query, connection))
+                    {
+                        return command.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Log exception if needed
+                return -1;
+            }
+        }
+
+        public bool SchemaExists(string schemaName)
+        {
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+                    var query = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = @schemaName";
+                    using (var command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@schemaName", schemaName);
+                        var count = (int)command.ExecuteScalar();
+                        return count > 0;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        public bool TableExists(string schemaName, string tableName)
+        {
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+                    var query = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table";
+                    using (var command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@schema", schemaName);
+                        command.Parameters.AddWithValue("@table", tableName);
+                        var count = (int)command.ExecuteScalar();
+                        return count > 0;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        public Dictionary<string, string> GetTableColumns(string schemaName, string tableName)
+        {
+            var columns = new Dictionary<string, string>();
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+                    var query = @"SELECT COLUMN_NAME, DATA_TYPE 
+                                 FROM INFORMATION_SCHEMA.COLUMNS 
+                                 WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
+                                 ORDER BY ORDINAL_POSITION";
+                    using (var command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@schema", schemaName);
+                        command.Parameters.AddWithValue("@table", tableName);
+                        using (var reader = command.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                columns.Add(reader.GetString(0), reader.GetString(1));
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Log exception if needed
+            }
+            return columns;
+        }
+    }
+}

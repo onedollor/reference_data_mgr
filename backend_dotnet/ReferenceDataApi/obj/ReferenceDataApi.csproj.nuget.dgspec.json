@@ -1,30 +1,30 @@
 {
   "format": 1,
   "restore": {
-    "/home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/ReferenceDataApi.csproj": {}
+    "/mnt/c/Code/reference_data_mgr/backend_dotnet/ReferenceDataApi/ReferenceDataApi.csproj": {}
   },
   "projects": {
-    "/home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/ReferenceDataApi.csproj": {
+    "/mnt/c/Code/reference_data_mgr/backend_dotnet/ReferenceDataApi/ReferenceDataApi.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/ReferenceDataApi.csproj",
+        "projectUniqueName": "/mnt/c/Code/reference_data_mgr/backend_dotnet/ReferenceDataApi/ReferenceDataApi.csproj",
         "projectName": "ReferenceDataApi",
-        "projectPath": "/home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/ReferenceDataApi.csproj",
-        "packagesPath": "/root/.nuget/packages/",
-        "outputPath": "/home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/obj/",
+        "projectPath": "/mnt/c/Code/reference_data_mgr/backend_dotnet/ReferenceDataApi/ReferenceDataApi.csproj",
+        "packagesPath": "/home/lin/.nuget/packages/",
+        "outputPath": "/mnt/c/Code/reference_data_mgr/backend_dotnet/ReferenceDataApi/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "/root/.nuget/NuGet/NuGet.Config"
+          "/home/lin/.nuget/NuGet/NuGet.Config"
         ],
         "originalTargetFrameworks": [
-          "net6.0"
+          "net472"
         ],
         "sources": {
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
-          "net6.0": {
-            "targetAlias": "net6.0",
+          "net472": {
+            "targetAlias": "net472",
             "projectReferences": {}
           }
         },
@@ -32,61 +32,37 @@
           "warnAsError": [
             "NU1605"
           ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
         }
       },
       "frameworks": {
-        "net6.0": {
-          "targetAlias": "net6.0",
+        "net472": {
+          "targetAlias": "net472",
           "dependencies": {
-            "CsvHelper": {
+            "Microsoft.AspNet.WebApi": {
               "target": "Package",
-              "version": "[12.3.2, )"
+              "version": "[5.2.9, )"
             },
-            "Microsoft.Data.SqlClient": {
+            "Microsoft.AspNet.WebApi.Cors": {
               "target": "Package",
-              "version": "[6.1.1, )"
+              "version": "[5.2.9, )"
             },
-            "Microsoft.Extensions.Configuration": {
+            "Microsoft.NETFramework.ReferenceAssemblies": {
+              "suppressParent": "All",
               "target": "Package",
-              "version": "[6.0.1, )"
-            },
-            "Microsoft.Extensions.Configuration.Json": {
-              "target": "Package",
-              "version": "[6.0.0, )"
+              "version": "[1.0.3, )",
+              "autoReferenced": true
             },
             "Newtonsoft.Json": {
               "target": "Package",
-              "version": "[13.0.3, )"
-            },
-            "Swashbuckle.AspNetCore": {
-              "target": "Package",
-              "version": "[6.5.0, )"
-            },
-            "System.Data.SqlClient": {
-              "target": "Package",
-              "version": "[4.8.5, )"
+              "version": "[12.0.2, )"
             }
           },
-          "imports": [
-            "net461",
-            "net462",
-            "net47",
-            "net471",
-            "net472",
-            "net48",
-            "net481"
-          ],
-          "assetTargetFallback": true,
-          "warn": true,
-          "frameworkReferences": {
-            "Microsoft.AspNetCore.App": {
-              "privateAssets": "none"
-            },
-            "Microsoft.NETCore.App": {
-              "privateAssets": "all"
-            }
-          },
-          "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/6.0.428/RuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "/home/lin/.dotnet/sdk/8.0.413/RuntimeIdentifierGraph.json"
         }
       }
     }

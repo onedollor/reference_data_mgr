@@ -1,0 +1,36 @@
+﻿using Microsoft.AspNetCore.Mvc;
+using ReferenceDataApi.Infrastructure;
+
+namespace ReferenceDataApi.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class TestController : ControllerBase
+{
+    private readonly ISimpleDatabaseManager _databaseManager;
+
+    public TestController(ISimpleDatabaseManager databaseManager)
+    {
+        _databaseManager = databaseManager;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Get()
+    {
+        return Ok(new { message = "API is running!", timestamp = DateTime.Now });
+    }
+
+    [HttpGet("database")]
+    public async Task<IActionResult> TestDatabase()
+    {
+        try
+        {
+            var result = await _databaseManager.TestConnectionAsync();
+            return Ok(new { success = true, message = "Database test completed", result });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Database connection failed", error = ex.Message });
+        }
+    }
+}
