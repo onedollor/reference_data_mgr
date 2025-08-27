@@ -101,7 +101,7 @@ namespace ReferenceDataApi.Controllers
             {
                 var config = new ConfigResponse
                 {
-                    max_upload_size = int.Parse(_configuration["FileSettings:MaxUploadSize"] ?? "20971520"), // 20MB default
+                    max_upload_size = int.Parse(ExpandEnvironmentVariables(_configuration["FileSettings:MaxUploadSize"]) ?? "20971520"), // 20MB default
                     supported_formats = new List<string> { "csv" },
                     default_delimiters = new DefaultDelimiters
                     {
@@ -119,15 +119,15 @@ namespace ReferenceDataApi.Controllers
                     },
                     DatabaseSettings = new DatabaseSettings
                     {
-                        DataSchema = _configuration["DatabaseSettings:DataSchema"],
-                        BackupSchema = _configuration["DatabaseSettings:BackupSchema"],
-                        PostloadStoredProcedure = _configuration["DatabaseSettings:PostloadStoredProcedure"]
+                        DataSchema = ExpandEnvironmentVariables(_configuration["DatabaseSettings:DataSchema"]) ?? "ref",
+                        BackupSchema = ExpandEnvironmentVariables(_configuration["DatabaseSettings:BackupSchema"]) ?? "bkp",
+                        PostloadStoredProcedure = ExpandEnvironmentVariables(_configuration["DatabaseSettings:PostloadStoredProcedure"]) ?? "sp_ref_postload"
                     },
                     FileSettings = new FileSettings
                     {
-                        UploadPath = _configuration["FileSettings:UploadPath"],
-                        ArchivePath = _configuration["FileSettings:ArchivePath"],
-                        TempPath = _configuration["FileSettings:TempPath"]
+                        UploadPath = ExpandEnvironmentVariables(_configuration["FileSettings:UploadPath"]) ?? "./uploads",
+                        ArchivePath = ExpandEnvironmentVariables(_configuration["FileSettings:ArchivePath"]) ?? "./archive",
+                        TempPath = ExpandEnvironmentVariables(_configuration["FileSettings:TempPath"]) ?? "./temp"
                     },
                     Timestamp = DateTime.UtcNow
                 };
@@ -470,26 +470,22 @@ namespace ReferenceDataApi.Controllers
 
             try
             {
-                // Placeholder implementation for rollback operation
-                // In a full implementation, this would:
-                // 1. Validate the backup version exists
-                // 2. Create a new backup of current data  
-                // 3. Replace current table data with backup version data
-                // 4. Update metadata and logs
-
                 _logger.LogInfo("rollback_start", "Starting rollback for table " + request.Table + " to version " + request.VersionId);
 
-                // Simulate rollback process
-                System.Threading.Thread.Sleep(1000);
+                // Perform real rollback operation
+                var rollbackResult = _databaseManager.RollbackTableToVersion(request.Table, request.VersionId.Value);
 
                 _logger.LogInfo("rollback_complete", "Completed rollback for table " + request.Table + " to version " + request.VersionId);
 
                 return Ok(new 
                 { 
                     message = "Rollback completed successfully",
-                    table = request.Table,
-                    version = request.VersionId,
-                    timestamp = DateTime.UtcNow
+                    table = rollbackResult["table"],
+                    version = rollbackResult["version_id"],
+                    main_rows = rollbackResult["main_rows_restored"],
+                    stage_rows = rollbackResult["stage_rows_cleared"],
+                    current_backup_rows = rollbackResult["current_rows_backed_up"],
+                    timestamp = rollbackResult["timestamp"]
                 });
             }
             catch (Exception ex)
@@ -510,32 +506,22 @@ namespace ReferenceDataApi.Controllers
 
             try
             {
-                // Placeholder implementation for rollback operation
-                // In a full implementation, this would:
-                // 1. Validate the backup version exists
-                // 2. Create a new backup of current data  
-                // 3. Replace current table data with backup version data
-                // 4. Update metadata and logs
-
                 _logger.LogInfo("rollback_start", "Starting rollback for table " + tableName + " to version " + versionId);
 
-                // Simulate rollback process with some realistic data
-                System.Threading.Thread.Sleep(1500);
+                // Perform real rollback operation
+                var rollbackResult = _databaseManager.RollbackTableToVersion(tableName, versionId);
 
-                var mainRows = 150 + (versionId * 10); // Simulate variable row counts
-                var stageRows = 0; // No staging rows after rollback
-
-                _logger.LogInfo("rollback_complete", "Completed rollback for table " + tableName + " to version " + versionId + 
-                    " (main_rows=" + mainRows + ", stage_rows=" + stageRows + ")");
+                _logger.LogInfo("rollback_complete", "Completed rollback for table " + tableName + " to version " + versionId);
 
                 return Ok(new 
                 { 
                     message = "Rollback completed successfully",
-                    table = tableName,
-                    version = versionId,
-                    main_rows = mainRows,
-                    stage_rows = stageRows,
-                    timestamp = DateTime.UtcNow
+                    table = rollbackResult["table"],
+                    version = rollbackResult["version_id"],
+                    main_rows = rollbackResult["main_rows_restored"],
+                    stage_rows = rollbackResult["stage_rows_cleared"],
+                    current_backup_rows = rollbackResult["current_rows_backed_up"],
+                    timestamp = rollbackResult["timestamp"]
                 });
             }
             catch (Exception ex)
@@ -758,6 +744,30 @@ namespace ReferenceDataApi.Controllers
 
             var remoteIp = Request.HttpContext.Connection.RemoteIpAddress;
             return remoteIp != null ? remoteIp.ToString() : "unknown";
+        }
+
+        private string ExpandEnvironmentVariables(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return input;
+
+            try
+            {
+                // Expand environment variables in format ${VAR_NAME:default_value}
+                var result = System.Text.RegularExpressions.Regex.Replace(input, @"\$\{([^}:]+)(?::([^}]*))?\}", match =>
+                {
+                    var varName = match.Groups[1].Value;
+                    var defaultValue = match.Groups.Count > 2 ? match.Groups[2].Value : "";
+                    var envValue = Environment.GetEnvironmentVariable(varName);
+                    return envValue ?? defaultValue;
+                });
+
+                return result;
+            }
+            catch (Exception)
+            {
+                return input; // Return original string if expansion fails
+            }
         }
     }
 }

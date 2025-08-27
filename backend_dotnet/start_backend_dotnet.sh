@@ -57,5 +57,5 @@ echo ""
 echo "Press Ctrl+C to stop the server"
 echo ""
 
-# Run the application
-dotnet run --configuration Release --urls "http://0.0.0.0:5000"
+# Run the application (URLs configured in appsettings.json)
+dotnet run --configuration Release

@@ -33,3 +33,6 @@
 /home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/obj/Release/net6.0/ReferenceDataApi.pdb
 /home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/obj/Release/net6.0/ReferenceDataApi.genruntimeconfig.cache
 /home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/obj/Release/net6.0/ref/ReferenceDataApi.dll
+/home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/bin/Release/net6.0/appsettings.Development.json
+/home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/bin/Release/net6.0/appsettings.Production.json
+/home/lin/repo/reference_data_mgr/backend_dotnet/ReferenceDataApi/bin/Release/net6.0/web.config

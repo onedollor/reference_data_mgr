@@ -16,8 +16,18 @@ namespace ReferenceDataApi
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Configure to listen on port 8000
-            builder.WebHost.UseUrls("http://localhost:8000", "https://localhost:8001");
+            // Configure server URLs from configuration with environment variable expansion
+            var host = ExpandEnvironmentVariables(builder.Configuration["ServerSettings:Host"]) ?? "localhost";
+            var httpPortStr = ExpandEnvironmentVariables(builder.Configuration["ServerSettings:HttpPort"]) ?? "8000";
+            var httpsPortStr = ExpandEnvironmentVariables(builder.Configuration["ServerSettings:HttpsPort"]) ?? "8001";
+            
+            var httpPort = int.Parse(httpPortStr);
+            var httpsPort = int.Parse(httpsPortStr);
+            
+            var httpUrl = string.Format("http://{0}:{1}", host, httpPort);
+            var httpsUrl = string.Format("https://{0}:{1}", host, httpsPort);
+            
+            builder.WebHost.UseUrls(httpUrl, httpsUrl);
 
             // Add services to the container - .NET Framework 4.5 compatible way
             ConfigureServices(builder.Services, builder.Configuration);
@@ -28,6 +38,30 @@ namespace ReferenceDataApi
             Configure(app, app.Environment);
 
             app.Run();
+        }
+
+        private static string ExpandEnvironmentVariables(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return input;
+
+            try
+            {
+                // Expand environment variables in format ${VAR_NAME:default_value}
+                var result = System.Text.RegularExpressions.Regex.Replace(input, @"\$\{([^}:]+)(?::([^}]*))?\}", match =>
+                {
+                    var varName = match.Groups[1].Value;
+                    var defaultValue = match.Groups.Count > 2 ? match.Groups[2].Value : "";
+                    var envValue = Environment.GetEnvironmentVariable(varName);
+                    return envValue ?? defaultValue;
+                });
+
+                return result;
+            }
+            catch (Exception)
+            {
+                return input; // Return original string if expansion fails
+            }
         }
 
         private static void ConfigureServices(IServiceCollection services, IConfiguration configuration)

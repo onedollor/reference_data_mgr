@@ -19,7 +19,37 @@
     
     <!-- Configuration -->
     <script>
-        const API_BASE_URL = 'http://localhost:8000';
+        // Smart API URL configuration - auto-detects environment and allows overrides
+        function getApiBaseUrl() {
+            // 1. Check for manual override via URL parameter (?api_url=...)
+            const urlParams = new URLSearchParams(window.location.search);
+            const manualOverride = urlParams.get('api_url');
+            if (manualOverride) {
+                console.log('Using manual API URL override:', manualOverride);
+                return manualOverride;
+            }
+
+            // 2. Environment-based auto-detection
+            const currentOrigin = window.location.origin;
+            const currentHost = window.location.hostname;
+            
+            // Production environment detection
+            if (currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+                // In production, assume API is on same host but port 8000
+                const apiUrl = currentOrigin.includes('https') 
+                    ? `https://${currentHost}:8001` 
+                    : `http://${currentHost}:8000`;
+                console.log('Production environment detected, using API URL:', apiUrl);
+                return apiUrl;
+            }
+
+            // 3. Development environment defaults
+            console.log('Development environment detected, using default API URL: http://localhost:8000');
+            return 'http://localhost:8000';
+        }
+        
+        const API_BASE_URL = getApiBaseUrl();
+        console.log('API Base URL configured as:', API_BASE_URL);
     </script>
     
     <!-- Custom Tailwind Configuration -->

@@ -31,7 +31,10 @@
       "mcp__playwright__browser_install",
       "Bash(pkill:*)",
       "Bash(kill:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(/bashes)",
+      "Bash(DOTNET_ENVIRONMENT=Development ./bin/Release/net6.0/ReferenceDataApi)",
+      "Bash(/dev/null)"
     ],
     "deny": []
   }

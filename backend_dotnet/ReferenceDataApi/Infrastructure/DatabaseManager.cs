@@ -21,13 +21,93 @@ namespace ReferenceDataApi.Infrastructure
 
         public DatabaseManager(IConfiguration configuration, ILogger logger)
         {
-            _connectionString = configuration.GetConnectionString("DefaultConnection");
-            _dataSchema = configuration["DatabaseSettings:DataSchema"] ?? "ref";
-            _backupSchema = configuration["DatabaseSettings:BackupSchema"] ?? "bkp";  
-            _postloadSpName = configuration["DatabaseSettings:PostloadStoredProcedure"] ?? "sp_ref_postload";
-            _database = configuration["DatabaseSettings:Database"] ?? "ReferenceDataDB";
-            _staffDatabase = configuration["DatabaseSettings:StaffDatabase"] ?? "StaffDB";
+            var rawConnectionString = configuration.GetConnectionString("DefaultConnection");
+            _connectionString = ExpandEnvironmentVariables(rawConnectionString);
+            
+            // Core database settings - with environment variable expansion
+            _dataSchema = ExpandEnvironmentVariables(configuration["DatabaseSettings:DataSchema"]) ?? "ref";
+            _backupSchema = ExpandEnvironmentVariables(configuration["DatabaseSettings:BackupSchema"]) ?? "bkp";  
+            _postloadSpName = ExpandEnvironmentVariables(configuration["DatabaseSettings:PostloadStoredProcedure"]) ?? "sp_ref_postload";
+            _database = ExpandEnvironmentVariables(configuration["DatabaseSettings:Database"]) ?? ExtractDatabaseNameFromConnectionString(_connectionString);
+            _staffDatabase = ExpandEnvironmentVariables(configuration["DatabaseSettings:StaffDatabase"]) ?? "StaffDatabase";
+            
             _logger = logger;
+            
+            // Log configuration info for debugging
+            _logger.LogInfo("database_config", string.Format("Database: {0}, DataSchema: {1}, BackupSchema: {2}, Server: {3}", 
+                _database, _dataSchema, _backupSchema, ExtractServerFromConnectionString(_connectionString)));
+        }
+
+        private string ExpandEnvironmentVariables(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return input;
+
+            try
+            {
+                // Expand environment variables in format ${VAR_NAME:default_value}
+                var result = System.Text.RegularExpressions.Regex.Replace(input, @"\$\{([^}:]+)(?::([^}]*))?\}", match =>
+                {
+                    var varName = match.Groups[1].Value;
+                    var defaultValue = match.Groups.Count > 2 ? match.Groups[2].Value : "";
+                    var envValue = Environment.GetEnvironmentVariable(varName);
+                    return envValue ?? defaultValue;
+                });
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("env_var_expansion_error", "Error expanding environment variables: " + ex.Message);
+                return input; // Return original string if expansion fails
+            }
+        }
+
+        private string ExtractServerFromConnectionString(string connectionString)
+        {
+            try
+            {
+                var parts = connectionString.Split(';');
+                foreach (var part in parts)
+                {
+                    var keyValue = part.Split('=');
+                    if (keyValue.Length == 2 && keyValue[0].Trim().ToLower() == "server")
+                    {
+                        return keyValue[1].Trim();
+                    }
+                }
+                return "Unknown";
+            }
+            catch
+            {
+                return "Unknown";
+            }
+        }
+
+        private string ExtractDatabaseNameFromConnectionString(string connectionString)
+        {
+            try
+            {
+                // Extract database name from connection string
+                var parts = connectionString.Split(';');
+                foreach (var part in parts)
+                {
+                    var keyValue = part.Split('=');
+                    if (keyValue.Length == 2 && keyValue[0].Trim().ToLower() == "database")
+                    {
+                        return keyValue[1].Trim();
+                    }
+                }
+                
+                // If not found, use a safe default
+                _logger.LogWarning("database_name_extraction", "Could not extract database name from connection string, using default 'ReferenceDataDB'");
+                return "ReferenceDataDB";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("database_name_extraction_error", "Error extracting database name: " + ex.Message);
+                return "ReferenceDataDB";
+            }
         }
 
         public bool TestConnection()
@@ -1062,12 +1142,12 @@ namespace ReferenceDataApi.Infrastructure
                                 COUNT(DISTINCT ref_data_version_id) as version_count,
                                 MAX(ref_data_version_id) as latest_version,
                                 MAX(ref_data_loadtime) as latest_created_date
-                            FROM [" + _backupSchema + @"].[' + b.TABLE_NAME + ']
+                            FROM [" + _database + "].[" + _backupSchema + "].[\" + b.TABLE_NAME + @\"]
                             WHERE ref_data_version_id IS NOT NULL
                         ) v
                         OUTER APPLY (
                             SELECT COUNT(*) as row_count 
-                            FROM [" + _backupSchema + @"].[' + b.TABLE_NAME + ']
+                            FROM [" + _database + "].[" + _backupSchema + "].[\" + b.TABLE_NAME + @\"]
                         ) r
                         WHERE b.TABLE_SCHEMA = '" + _backupSchema + @"' 
                             AND b.TABLE_NAME LIKE '%_backup'
@@ -1120,6 +1200,111 @@ namespace ReferenceDataApi.Infrastructure
             {
                 _logger.LogError("get_backup_tables_error", "Failed to get backup tables: " + ex.Message);
                 return new List<BackupInfo>(); // Return empty list on error
+            }
+        }
+
+        public Dictionary<string, object> RollbackTableToVersion(string tableName, int versionId)
+        {
+            try
+            {
+                var baseName = ExtractTableBaseName(tableName);
+                var backupTableName = baseName + "_backup";
+                var mainTableName = baseName;
+                var stageTableName = baseName + "_stage";
+
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+
+                    // Step 1: Validate the backup version exists
+                    var versionExistsQuery = "SELECT COUNT(*) FROM [" + _backupSchema + "].[" + backupTableName + "] WHERE ref_data_version_id = @versionId";
+                    using (var cmd = new SqlCommand(versionExistsQuery, connection))
+                    {
+                        cmd.Parameters.AddWithValue("@versionId", versionId);
+                        var versionCount = Convert.ToInt32(cmd.ExecuteScalar());
+                        if (versionCount == 0)
+                        {
+                            throw new Exception("Backup version " + versionId + " does not exist for table " + tableName);
+                        }
+                    }
+
+                    // Step 2: Create backup of current data before rollback
+                    var currentDataExists = TableExists(mainTableName, _dataSchema);
+                    int currentRowsBackedUp = 0;
+                    if (currentDataExists)
+                    {
+                        currentRowsBackedUp = BackupExistingData(mainTableName, backupTableName);
+                        _logger.LogInfo("rollback_backup_current", "Backed up " + currentRowsBackedUp + " current rows before rollback");
+                    }
+
+                    // Step 3: Get columns from main table to ensure proper data transfer
+                    var mainTableColumns = GetTableColumns(mainTableName, _dataSchema);
+                    var columnNames = mainTableColumns.Where(c => 
+                        !c.Name.ToLower().Equals("ref_data_loadtime") && 
+                        !c.Name.ToLower().Equals("ref_data_loadtype") && 
+                        !c.Name.ToLower().Equals("ref_data_version_id")
+                    ).Select(c => "[" + c.Name + "]").ToList();
+
+                    // Step 4: Clear current main table
+                    TruncateTable(mainTableName, _dataSchema);
+
+                    // Step 5: Restore data from backup version
+                    var restoreColumns = string.Join(", ", columnNames);
+                    var restoreSql = "INSERT INTO [" + _dataSchema + "].[" + mainTableName + "] (" + restoreColumns + 
+                                   ", [ref_data_loadtime], [ref_data_loadtype]) " +
+                                   "SELECT " + restoreColumns + ", GETDATE(), 'rollback' " +
+                                   "FROM [" + _backupSchema + "].[" + backupTableName + "] " +
+                                   "WHERE ref_data_version_id = @versionId";
+
+                    int restoredRows = 0;
+                    using (var restoreCmd = new SqlCommand(restoreSql, connection))
+                    {
+                        restoreCmd.Parameters.AddWithValue("@versionId", versionId);
+                        restoredRows = restoreCmd.ExecuteNonQuery();
+                    }
+
+                    // Step 6: Clear stage table if it exists
+                    int stageRowsCleared = 0;
+                    if (TableExists(stageTableName, _dataSchema))
+                    {
+                        var stageCountQuery = "SELECT COUNT(*) FROM [" + _dataSchema + "].[" + stageTableName + "]";
+                        using (var countCmd = new SqlCommand(stageCountQuery, connection))
+                        {
+                            stageRowsCleared = Convert.ToInt32(countCmd.ExecuteScalar());
+                        }
+                        TruncateTable(stageTableName, _dataSchema);
+                    }
+
+                    // Step 7: Update Reference_Data_Cfg table
+                    var updateCfgSql = "UPDATE [" + _dataSchema + "].[Reference_Data_Cfg] " +
+                                     "SET last_updated = GETDATE(), row_count = @rowCount, status = 'rolled_back' " +
+                                     "WHERE table_name = @tableName";
+                    using (var updateCmd = new SqlCommand(updateCfgSql, connection))
+                    {
+                        updateCmd.Parameters.AddWithValue("@rowCount", restoredRows);
+                        updateCmd.Parameters.AddWithValue("@tableName", mainTableName);
+                        updateCmd.ExecuteNonQuery();
+                    }
+
+                    _logger.LogInfo("rollback_completed", "Successfully rolled back table " + tableName + " to version " + versionId);
+
+                    // Return detailed results
+                    return new Dictionary<string, object>
+                    {
+                        {"success", true},
+                        {"table", tableName},
+                        {"version_id", versionId},
+                        {"main_rows_restored", restoredRows},
+                        {"stage_rows_cleared", stageRowsCleared},
+                        {"current_rows_backed_up", currentRowsBackedUp},
+                        {"timestamp", DateTime.UtcNow}
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("rollback_error", "Failed to rollback table " + tableName + " to version " + versionId + ": " + ex.Message);
+                throw new Exception("Rollback failed: " + ex.Message);
             }
         }
     }
