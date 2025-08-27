@@ -66,6 +66,9 @@ namespace ReferenceDataApi.Services
 
                 // Extract column names from header if detected
                 var columnNames = ExtractColumnNames(lines, primaryDelimiter, hasHeader);
+                
+                // Extract sample data rows (skip header if present, take up to 3 rows)
+                var sampleRows = ExtractSampleRows(lines, primaryDelimiter, hasHeader, 3);
 
                 var response = new FormatDetectionResponse
                 {
@@ -100,7 +103,8 @@ namespace ReferenceDataApi.Services
                         HasTrailer = hasTrailer,
                         EstimatedRows = rowCount,
                         EstimatedColumns = columnCount,
-                        Columns = columnNames
+                        Columns = columnNames,
+                        SampleRows = sampleRows
                     },
                     Message = confidence > 0.5 ? "Format detected successfully" : "Format detection uncertain"
                 };
@@ -255,6 +259,47 @@ namespace ReferenceDataApi.Services
                 }
                 return columnNames;
             }
+        }
+
+        private List<List<string>> ExtractSampleRows(List<string> lines, string delimiter, bool hasHeader, int maxRows)
+        {
+            var sampleRows = new List<List<string>>();
+            
+            if (lines.Count == 0)
+                return sampleRows;
+
+            // Start from line 1 if has header, otherwise from line 0
+            var startIndex = hasHeader ? 1 : 0;
+            var rowCount = 0;
+
+            for (int i = startIndex; i < lines.Count && rowCount < maxRows; i++)
+            {
+                var line = lines[i];
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                try
+                {
+                    // Parse the line into columns
+                    var fields = line.Split(new string[] { delimiter }, StringSplitOptions.None);
+                    var cleanFields = new List<string>();
+                    
+                    foreach (var field in fields)
+                    {
+                        cleanFields.Add(field.Trim().Trim('"').Trim('\''));
+                    }
+                    
+                    sampleRows.Add(cleanFields);
+                    rowCount++;
+                }
+                catch
+                {
+                    // Skip lines that can't be parsed
+                    continue;
+                }
+            }
+
+            return sampleRows;
         }
 
         private double CalculateConfidence(List<string> lines, string delimiter)

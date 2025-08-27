@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
+using System.Globalization;
+using CsvHelper;
+using CsvHelper.Configuration;
 using ReferenceDataApi.Infrastructure;
 
 namespace ReferenceDataApi.Services
@@ -53,6 +57,24 @@ namespace ReferenceDataApi.Services
                 CreateTableFromHeaders(fullTableName, headers);
                 _logger.LogInfo("table_created", "Created table " + fullTableName);
                 
+                // Step 2.5: Handle backup if reference data configuration is enabled
+                if (configReferenceData)
+                {
+                    _progressTracker.UpdateProgress(progressKey, "backing_up", 55, "Creating backup table and backing up existing data");
+                    
+                    // Create backup table if it doesn't exist
+                    var tableColumns = _databaseManager.GetTableColumns(tableName, targetSchema);
+                    _databaseManager.CreateBackupTable(tableName, tableColumns);
+                    _logger.LogInfo("backup_table_created", "Backup table created for " + tableName);
+                    
+                    // Backup existing data if table has data
+                    if (_databaseManager.TableExists(tableName, targetSchema))
+                    {
+                        var backedUpRows = _databaseManager.BackupExistingData(fullTableName, tableName + "_backup");
+                        _logger.LogInfo("data_backed_up", "Backed up " + backedUpRows + " rows from " + fullTableName);
+                    }
+                }
+                
                 // Step 3: Import data in batches
                 _progressTracker.UpdateProgress(progressKey, "importing", 70, "Importing data to database");
                 
@@ -90,74 +112,164 @@ namespace ReferenceDataApi.Services
             var delimiter = formatConfig.ContainsKey("delimiter") ? formatConfig["delimiter"] : ",";
             var result = new List<List<string>>();
 
-            using (var reader = new System.IO.StreamReader(filePath))
+            try
             {
-                string line;
-                int lineNumber = 0;
-                while ((line = reader.ReadLine()) != null)
+                using (var reader = new StreamReader(filePath))
+                using (var csv = new CsvReader(reader))
                 {
-                    lineNumber++;
+                    // Configure for version 12.3.2 API
+                    csv.Configuration.Delimiter = delimiter;
+                    csv.Configuration.HasHeaderRecord = false;
+                    csv.Configuration.BadDataFound = null; // Don't throw on bad data
+                    csv.Configuration.MissingFieldFound = null; // Don't throw on missing fields
+                    csv.Configuration.HeaderValidated = null; // Don't validate headers
                     
-                    // Skip empty lines
-                    if (string.IsNullOrWhiteSpace(line))
+                    int lineNumber = 0;
+                    while (csv.Read())
                     {
-                        continue;
-                    }
-
-                    try
-                    {
-                        // Simple CSV parsing - in production would use more robust parser
-                        var fields = line.Split(delimiter.ToCharArray()).Select(f => f.Trim().Trim('"')).ToList();
-                        
-                        // Remove empty trailing fields that might be caused by trailing delimiters
-                        while (fields.Count > 0 && string.IsNullOrWhiteSpace(fields[fields.Count - 1]))
+                        lineNumber++;
+                        try
                         {
-                            fields.RemoveAt(fields.Count - 1);
+                            var fields = new List<string>();
+                            
+                            // Use the Context.Record for version 12.3.2
+                            var fieldCount = csv.Context.Record.Length;
+                            for (int i = 0; i < fieldCount; i++)
+                            {
+                                fields.Add(csv.GetField(i) ?? "");
+                            }
+                            
+                            // Only add non-empty records
+                            if (fields.Any(field => !string.IsNullOrWhiteSpace(field)))
+                            {
+                                result.Add(fields);
+                            }
                         }
-                        
-                        result.Add(fields);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning("csv_parse_line_error", "Error parsing line " + lineNumber + ": " + ex.Message + " (line content: " + line + ")");
-                        // Continue with next line
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning("csv_parse_line_error", "Error parsing line " + lineNumber + ": " + ex.Message);
+                            // Continue with next line - CsvHelper handles malformed CSV better
+                        }
                     }
                 }
             }
+            catch (Exception ex)
+            {
+                _logger.LogError("csv_parse_error", "Error parsing CSV file: " + ex.Message);
+                // Fallback to empty result
+                return new List<List<string>>();
+            }
 
+            _logger.LogInfo("csv_parse_complete", "Successfully parsed CSV with " + result.Count + " records using RFC 4180 compliant CsvHelper parser");
             return result;
         }
 
         private void CreateTableFromHeaders(string fullTableName, List<string> headers)
         {
-            // Create table with all VARCHAR columns for simplicity
-            var columnDefinitions = headers.Select(header => "[" + header + "] VARCHAR(255)").ToList();
             var tableNameParts = fullTableName.Split('.');
-            var createTableSql = "IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '" + tableNameParts[1] + "' AND TABLE_SCHEMA = '" + tableNameParts[0] + "') " +
-                               "CREATE TABLE " + fullTableName + " (" + string.Join(", ", columnDefinitions) + ")";
+            var schemaName = tableNameParts[0];
+            var tableName = tableNameParts[1];
             
-            _databaseManager.ExecuteNonQuery(createTableSql);
+            // Check if table already exists
+            var tableExistsSql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '" + tableName + "' AND TABLE_SCHEMA = '" + schemaName + "'";
+            _logger.LogInfo("table_existence_check", "Checking if table exists with SQL: " + tableExistsSql);
+            var result = _databaseManager.ExecuteScalar(tableExistsSql);
+            _logger.LogInfo("table_existence_result", "Query result: " + (result ?? "null") + " for table " + fullTableName);
+            var tableExists = Convert.ToInt32(result ?? 0) > 0;
+            _logger.LogInfo("table_exists_decision", "Table " + fullTableName + " exists: " + tableExists);
+            
+            if (!tableExists)
+            {
+                // Create new table with data columns + metadata columns
+                var columnDefinitions = headers.Select(header => "[" + header + "] VARCHAR(255)").ToList();
+                columnDefinitions.Add("[ref_data_loadtime] DATETIME DEFAULT GETDATE()");
+                columnDefinitions.Add("[ref_data_loadtype] VARCHAR(255)");
+                
+                var createTableSql = "CREATE TABLE " + fullTableName + " (" + string.Join(", ", columnDefinitions) + ")";
+                _databaseManager.ExecuteNonQuery(createTableSql);
+            }
+            else
+            {
+                // Table exists - ensure metadata columns are present
+                EnsureMetadataColumnsExist(fullTableName);
+            }
+        }
+        
+        private void EnsureMetadataColumnsExist(string fullTableName)
+        {
+            var tableNameParts = fullTableName.Split('.');
+            var schemaName = tableNameParts[0];
+            var tableName = tableNameParts[1];
+            
+            // Check if ref_data_loadtime column exists
+            var loadtimeExistsSql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '" + tableName + "' AND TABLE_SCHEMA = '" + schemaName + "' AND COLUMN_NAME = 'ref_data_loadtime'";
+            var loadtimeExists = Convert.ToInt32(_databaseManager.ExecuteScalar(loadtimeExistsSql)) > 0;
+            
+            if (!loadtimeExists)
+            {
+                var addLoadtimeSql = "ALTER TABLE " + fullTableName + " ADD [ref_data_loadtime] DATETIME DEFAULT GETDATE()";
+                _databaseManager.ExecuteNonQuery(addLoadtimeSql);
+                _logger.LogInfo("metadata_column_added", "Added ref_data_loadtime column to " + fullTableName);
+            }
+            
+            // Check if ref_data_loadtype column exists  
+            var loadtypeExistsSql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '" + tableName + "' AND TABLE_SCHEMA = '" + schemaName + "' AND COLUMN_NAME = 'ref_data_loadtype'";
+            var loadtypeExists = Convert.ToInt32(_databaseManager.ExecuteScalar(loadtypeExistsSql)) > 0;
+            
+            if (!loadtypeExists)
+            {
+                var addLoadtypeSql = "ALTER TABLE " + fullTableName + " ADD [ref_data_loadtype] VARCHAR(255)";
+                _databaseManager.ExecuteNonQuery(addLoadtypeSql);
+                _logger.LogInfo("metadata_column_added", "Added ref_data_loadtype column to " + fullTableName);
+            }
         }
 
         private void ImportDataToTable(string fullTableName, List<string> headers, List<List<string>> dataRows)
         {
             var expectedColumnCount = headers.Count;
-            var skippedRows = 0;
+            var adjustedRows = 0;
 
             foreach (var row in dataRows)
             {
-                // Check if row has the expected number of columns
-                if (row.Count != expectedColumnCount)
+                var adjustedRow = new List<string>(row);
+                
+                // Handle column count mismatches by adjusting the row
+                if (adjustedRow.Count != expectedColumnCount)
                 {
-                    _logger.LogWarning("column_mismatch", 
-                        "Skipping row with " + row.Count + " columns (expected " + expectedColumnCount + "): " + 
-                        string.Join(", ", row.Take(5)) + (row.Count > 5 ? "..." : ""));
-                    skippedRows++;
-                    continue;
+                    if (adjustedRow.Count > expectedColumnCount)
+                    {
+                        // Too many columns - truncate extra ones
+                        adjustedRow = adjustedRow.Take(expectedColumnCount).ToList();
+                        _logger.LogWarning("column_truncated", 
+                            "Truncated row from " + row.Count + " to " + expectedColumnCount + " columns: " + 
+                            string.Join(", ", row.Take(5)) + (row.Count > 5 ? "..." : ""));
+                    }
+                    else
+                    {
+                        // Too few columns - pad with empty strings
+                        while (adjustedRow.Count < expectedColumnCount)
+                        {
+                            adjustedRow.Add("");
+                        }
+                        _logger.LogWarning("column_padded", 
+                            "Padded row from " + row.Count + " to " + expectedColumnCount + " columns: " + 
+                            string.Join(", ", row.Take(5)) + (row.Count > 5 ? "..." : ""));
+                    }
+                    adjustedRows++;
                 }
 
-                var values = row.Select(v => "'" + v.Replace("'", "''") + "'").ToList(); // Escape single quotes
-                var headerColumns = string.Join(", ", headers.Select(h => "[" + h + "]"));
+                var values = adjustedRow.Select(v => "'" + v.Replace("'", "''") + "'").ToList(); // Escape single quotes
+                
+                // Add metadata values
+                values.Add("GETDATE()"); // ref_data_loadtime (using SQL function, not quoted)
+                values.Add("'F'"); // ref_data_loadtype ('F' for Full load, 'A' for Append)
+                
+                // Include metadata columns in the INSERT
+                var allColumns = headers.Select(h => "[" + h + "]").ToList();
+                allColumns.Add("[ref_data_loadtime]");
+                allColumns.Add("[ref_data_loadtype]");
+                
+                var headerColumns = string.Join(", ", allColumns);
                 var insertSql = "INSERT INTO " + fullTableName + " (" + headerColumns + ") VALUES (" + string.Join(", ", values) + ")";
                 
                 try
@@ -171,9 +283,9 @@ namespace ReferenceDataApi.Services
                 }
             }
 
-            if (skippedRows > 0)
+            if (adjustedRows > 0)
             {
-                _logger.LogWarning("rows_skipped", "Skipped " + skippedRows + " rows due to column count mismatch");
+                _logger.LogInfo("rows_adjusted", "Adjusted " + adjustedRows + " rows for column count mismatch (padded missing or truncated extra columns)");
             }
         }
     }

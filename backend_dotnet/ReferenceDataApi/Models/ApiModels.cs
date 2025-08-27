@@ -120,6 +120,7 @@ namespace ReferenceDataApi.Models
         public int EstimatedRows { get; set; }
         public int EstimatedColumns { get; set; }
         public List<string> Columns { get; set; }
+        public List<List<string>> SampleRows { get; set; }
     }
 
     public class TableColumn

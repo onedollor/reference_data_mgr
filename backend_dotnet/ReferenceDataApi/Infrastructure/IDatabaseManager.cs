@@ -23,6 +23,7 @@ namespace ReferenceDataApi.Infrastructure
         void EnsurePostloadStoredProcedure();
         void InsertReferenceDataCfgRecord(string tableName);
         void ExecuteNonQuery(string sql);
+        object ExecuteScalar(string sql);
         List<Dictionary<string, object>> GetReferenceDataConfig();
         List<Dictionary<string, object>> GetAllTablesWithSchemas();
         Dictionary<string, object> VerifyLoadType(string filename, string loadMode);

@@ -3,18 +3,15 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Web;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
+using System.Web.Http;
+using System.Configuration;
 using ReferenceDataApi.Infrastructure;
 using ReferenceDataApi.Models;
 using ReferenceDataApi.Services;
 
 namespace ReferenceDataApi.Controllers
 {
-    [ApiController]
-    [Route("")]
-    public class ReferenceDataController : ControllerBase
+    public class ReferenceDataController : ApiController
     {
         private readonly IDatabaseManager _databaseManager;
         private readonly IFileHandler _fileHandler;
@@ -22,39 +19,31 @@ namespace ReferenceDataApi.Controllers
         private readonly IProgressTracker _progressTracker;
         private readonly ICsvDetector _csvDetector;
         private readonly IDataIngestion _dataIngestion;
-        private readonly IConfiguration _configuration;
-
-        public ReferenceDataController(
-            IDatabaseManager databaseManager,
-            IFileHandler fileHandler, 
-            ILogger logger,
-            IProgressTracker progressTracker,
-            ICsvDetector csvDetector,
-            IDataIngestion dataIngestion,
-            IConfiguration configuration)
+        public ReferenceDataController()
         {
-            _databaseManager = databaseManager;
-            _fileHandler = fileHandler;
-            _logger = logger;
-            _progressTracker = progressTracker;
-            _csvDetector = csvDetector;
-            _dataIngestion = dataIngestion;
-            _configuration = configuration;
+            _logger = new FileLogger(); // Simple implementation
+            _databaseManager = new DatabaseManager(_logger);
+            _fileHandler = new FileHandler(_logger);
+            _progressTracker = new ProgressTracker();
+            _csvDetector = new CsvDetector(_logger);
+            _dataIngestion = new DataIngestion(_databaseManager, _logger, _progressTracker);
         }
 
-        [HttpGet("/")]
-        public ActionResult<ApiResponse> Root()
+        [HttpGet]
+        [Route("")]
+        public ApiResponse Root()
         {
-            return Ok(new ApiResponse 
+            return new ApiResponse 
             { 
-                Message = "Reference Data Auto Ingest System - ASP.NET Core Backend",
+                Message = "Reference Data Auto Ingest System - .NET Framework 4.0 Backend",
                 Version = "1.0.0",
                 Timestamp = DateTime.UtcNow
-            });
+            };
         }
 
-        [HttpGet("/health/database")]
-        public ActionResult<HealthResponse> DatabaseHealth()
+        [HttpGet]
+        [Route("health/database")]
+        public HealthResponse DatabaseHealth()
         {
             try
             {
@@ -560,7 +549,7 @@ namespace ReferenceDataApi.Controllers
             try
             {
                 // Validate file size
-                var maxSize = int.Parse(_configuration["FileSettings:MaxUploadSize"] ?? "20971520"); // 20MB default
+                var maxSize = int.Parse(ExpandEnvironmentVariables(_configuration["FileSettings:MaxUploadSize"]) ?? "20971520"); // 20MB default
                 if (file.Length > maxSize)
                 {
                     return BadRequest(new { error = "File size exceeds maximum limit of " + maxSize + " bytes" });

@@ -34,7 +34,12 @@
       "Bash(node:*)",
       "Bash(/bashes)",
       "Bash(DOTNET_ENVIRONMENT=Development ./bin/Release/net6.0/ReferenceDataApi)",
-      "Bash(/dev/null)"
+      "Bash(/dev/null)",
+      "Read(/home/lin/ComfyUI/input/**)",
+      "Bash(DOTNET_ENVIRONMENT=Development dotnet run --urls http://0.0.0.0:8000)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "Bash(lsof:*)"
     ],
     "deny": []
   }

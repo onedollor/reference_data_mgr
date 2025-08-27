@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.Linq;
-using Microsoft.Extensions.Configuration;
+using System.Configuration;
 using ReferenceDataApi.Models;
 using ReferenceDataApi.Services;
 
@@ -19,17 +19,17 @@ namespace ReferenceDataApi.Infrastructure
         private readonly string _staffDatabase;
         private readonly ILogger _logger;
 
-        public DatabaseManager(IConfiguration configuration, ILogger logger)
+        public DatabaseManager(ILogger logger)
         {
-            var rawConnectionString = configuration.GetConnectionString("DefaultConnection");
+            var rawConnectionString = ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
             _connectionString = ExpandEnvironmentVariables(rawConnectionString);
             
             // Core database settings - with environment variable expansion
-            _dataSchema = ExpandEnvironmentVariables(configuration["DatabaseSettings:DataSchema"]) ?? "ref";
-            _backupSchema = ExpandEnvironmentVariables(configuration["DatabaseSettings:BackupSchema"]) ?? "bkp";  
-            _postloadSpName = ExpandEnvironmentVariables(configuration["DatabaseSettings:PostloadStoredProcedure"]) ?? "sp_ref_postload";
-            _database = ExpandEnvironmentVariables(configuration["DatabaseSettings:Database"]) ?? ExtractDatabaseNameFromConnectionString(_connectionString);
-            _staffDatabase = ExpandEnvironmentVariables(configuration["DatabaseSettings:StaffDatabase"]) ?? "StaffDatabase";
+            _dataSchema = ExpandEnvironmentVariables(ConfigurationManager.AppSettings["DatabaseSettings:DataSchema"]) ?? "ref";
+            _backupSchema = ExpandEnvironmentVariables(ConfigurationManager.AppSettings["DatabaseSettings:BackupSchema"]) ?? "bkp";  
+            _postloadSpName = ExpandEnvironmentVariables(ConfigurationManager.AppSettings["DatabaseSettings:PostloadStoredProcedure"]) ?? "sp_ref_postload";
+            _database = ExpandEnvironmentVariables(ConfigurationManager.AppSettings["DatabaseSettings:Database"]) ?? ExtractDatabaseNameFromConnectionString(_connectionString);
+            _staffDatabase = ExpandEnvironmentVariables(ConfigurationManager.AppSettings["DatabaseSettings:StaffDatabase"]) ?? "StaffDatabase";
             
             _logger = logger;
             
@@ -331,19 +331,13 @@ namespace ReferenceDataApi.Infrastructure
         private string NormalizeDataType(string dataType, int? maxLength = null, int? numericPrecision = null, int? numericScale = null)
         {
             if (string.IsNullOrEmpty(dataType))
-                return "varchar(255)";
+                return "varchar(4000)";
                 
             dataType = dataType.ToLower().Trim();
             
             if (dataType.StartsWith("varchar"))
             {
-                if (maxLength.HasValue)
-                {
-                    if (maxLength.Value == -1)
-                        return "varchar(max)";
-                    return "varchar(" + maxLength.Value + ")";
-                }
-                return "varchar(255)"; // Default
+                return "varchar(4000)"; // Use varchar(4000) for all varchar columns
             }
             
             if (dataType.StartsWith("decimal") || dataType.StartsWith("numeric"))
@@ -359,7 +353,7 @@ namespace ReferenceDataApi.Infrastructure
             {
                 if (maxLength.HasValue)
                 {
-                    return "char(" + maxLength.Value + ")";
+                    return "char(" + (maxLength.Value > 4000 ? 8000 : 4000) + ")";
                 }
                 return "char(1)"; // Default
             }
@@ -370,6 +364,13 @@ namespace ReferenceDataApi.Infrastructure
         public void CreateBackupTable(string tableName, List<TableColumn> columns)
         {
             var backupTableName = ExtractTableBaseName(tableName) + "_backup";
+            
+            // Check if source table exists first - no backup needed if source doesn't exist
+            if (!TableExists(tableName, _dataSchema))
+            {
+                _logger.LogInfo("no_backup_needed", "Source table " + _dataSchema + "." + tableName + " does not exist, no backup table needed");
+                return;
+            }
             
             try
             {
@@ -382,15 +383,44 @@ namespace ReferenceDataApi.Infrastructure
                     
                     if (backupExists)
                     {
-                        _logger.LogInfo("backup_table_exists", "Backup table exists, validating schema compatibility");
-                        // For .NET Framework 4.5 compatibility, we'll recreate if schema doesn't match
-                        // This is simpler than complex schema synchronization
-                        DropTableIfExists(backupTableName, _backupSchema);
+                        // Compare schema between source and backup tables
+                        var backupColumns = GetTableColumns(backupTableName, _backupSchema);
+                        var currentSourceColumns = GetTableColumns(tableName, _dataSchema);
+                        
+                        // Check if schemas match (excluding metadata columns)
+                        var sourceColNames = currentSourceColumns.Select(c => c.Name.ToLower()).Where(n => 
+                            !n.Equals("ref_data_loadtime") && !n.Equals("ref_data_loadtype")).OrderBy(n => n).ToList();
+                        var backupColNames = backupColumns.Select(c => c.Name.ToLower()).Where(n => 
+                            !n.Equals("ref_data_loadtime") && !n.Equals("ref_data_loadtype") && !n.Equals("ref_data_version_id")).OrderBy(n => n).ToList();
+                        
+                        var schemasMatch = sourceColNames.Count == backupColNames.Count && 
+                            sourceColNames.SequenceEqual(backupColNames);
+                        
+                        if (schemasMatch)
+                        {
+                            _logger.LogInfo("backup_table_exists", "Backup table schema matches source table: " + _backupSchema + "." + backupTableName);
+                            return; // Schema matches, use existing backup table
+                        }
+                        
+                        // Schema doesn't match - rename existing backup table and create new one
+                        var timestamp = DateTime.Now.ToString("yyyyMMddHHmmss");
+                        var archivedBackupName = backupTableName + "_" + timestamp;
+                        
+                        var renameSql = "EXEC sp_rename '[" + _backupSchema + "].[" + backupTableName + "]', '" + archivedBackupName + "'";
+                        using (var renameCmd = new SqlCommand(renameSql, connection))
+                        {
+                            renameCmd.ExecuteNonQuery();
+                        }
+                        
+                        _logger.LogInfo("backup_table_archived", "Archived old backup table to " + _backupSchema + "." + archivedBackupName + " due to schema mismatch");
                     }
+                    
+                    // Get columns from source table, not from parameters
+                    var sourceColumns = GetTableColumns(tableName, _dataSchema);
                     
                     // Build column definitions for backup table
                     var columnDefs = new List<string>();
-                    foreach (var col in columns)
+                    foreach (var col in sourceColumns)
                     {
                         var normalizedType = NormalizeDataType(col.DataType, col.MaxLength, col.NumericPrecision, col.NumericScale);
                         var colDef = "[" + col.Name + "] " + normalizedType;
@@ -600,8 +630,8 @@ namespace ReferenceDataApi.Infrastructure
                     insertColumns.Add("[ref_data_loadtype]");
                     insertColumns.Add("[ref_data_version_id]");
                     
-                    selectColumns.Add("GETDATE()");
-                    selectColumns.Add("'backup'");
+                    selectColumns.Add("[ref_data_loadtime]");
+                    selectColumns.Add("[ref_data_loadtype]");
                     selectColumns.Add("@version");
                     
                     var insertColumnList = string.Join(", ", insertColumns.ToArray());
@@ -943,6 +973,26 @@ namespace ReferenceDataApi.Infrastructure
             {
                 _logger.LogError("execute_non_query", "SQL execution failed: " + ex.Message + " SQL: " + sql);
                 throw new Exception("SQL execution failed: " + ex.Message);
+            }
+        }
+
+        public object ExecuteScalar(string sql)
+        {
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+                    using (var command = new SqlCommand(sql, connection))
+                    {
+                        return command.ExecuteScalar();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("execute_scalar", "SQL scalar execution failed: " + ex.Message + " SQL: " + sql);
+                throw new Exception("SQL scalar execution failed: " + ex.Message);
             }
         }
 
