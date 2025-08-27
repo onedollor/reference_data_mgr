@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 namespace ReferenceDataApi.Models
 {
@@ -221,37 +221,37 @@ namespace ReferenceDataApi.Models
 
     public class BackupInfo
     {
-        [JsonPropertyName("table")]
+        [JsonProperty("table")]
         public string Table { get; set; }
         
-        [JsonPropertyName("backup_table")]
+        [JsonProperty("backup_table")]
         public string BackupTable { get; set; }
         
-        [JsonPropertyName("version_id")]
+        [JsonProperty("version_id")]
         public int VersionId { get; set; }
         
-        [JsonPropertyName("created_date")]
+        [JsonProperty("created_date")]
         public DateTime CreatedDate { get; set; }
         
-        [JsonPropertyName("row_count")]
+        [JsonProperty("row_count")]
         public int RowCount { get; set; }
         
-        [JsonPropertyName("status")]
+        [JsonProperty("status")]
         public string Status { get; set; }
         
-        [JsonPropertyName("base_name")]
+        [JsonProperty("base_name")]
         public string BaseName { get; set; }
         
-        [JsonPropertyName("has_main")]
+        [JsonProperty("has_main")]
         public bool HasMain { get; set; }
         
-        [JsonPropertyName("has_stage")]
+        [JsonProperty("has_stage")]
         public bool HasStage { get; set; }
         
-        [JsonPropertyName("version_count")]
+        [JsonProperty("version_count")]
         public int VersionCount { get; set; }
         
-        [JsonPropertyName("latest_version")]
+        [JsonProperty("latest_version")]
         public int? LatestVersion { get; set; }
     }
 

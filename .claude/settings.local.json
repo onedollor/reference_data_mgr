@@ -39,8 +39,24 @@
       "Bash(DOTNET_ENVIRONMENT=Development dotnet run --urls http://0.0.0.0:8000)",
       "mcp__context7__resolve-library-id",
       "mcp__context7__get-library-docs",
-      "Bash(lsof:*)"
+      "Bash(lsof:*)",
+      "Bash(msbuild:*)",
+      "Bash(apt list:*)",
+      "Bash(sudo apt:*)",
+      "Bash(sudo apt install:*)",
+      "Bash(sed:*)",
+      "Bash(export PATH=$HOME/.dotnet:$PATH)",
+      "Bash(DOTNET_ENVIRONMENT=Development ./ReferenceDataApi --urls http://0.0.0.0:8000)",
+      "Bash(DOTNET_ENVIRONMENT=Development dotnet ReferenceDataApi.dll --urls http://0.0.0.0:8000)"
     ],
-    "deny": []
-  }
+    "deny": [],
+    "additionalDirectories": [
+      "/usr/bin"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "context7",
+    "playwright",
+    "sequential-thinking"
+  ]
 }

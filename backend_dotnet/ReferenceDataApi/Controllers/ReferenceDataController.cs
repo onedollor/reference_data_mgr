@@ -5,6 +5,8 @@ using System.IO;
 using System.Web;
 using System.Web.Http;
 using System.Configuration;
+using System.Net.Http;
+using System.Net;
 using ReferenceDataApi.Infrastructure;
 using ReferenceDataApi.Models;
 using ReferenceDataApi.Services;
@@ -83,8 +85,9 @@ namespace ReferenceDataApi.Controllers
             }
         }
 
-        [HttpGet("/config")]
-        public ActionResult<ConfigResponse> GetConfig()
+        [HttpGet]
+        [Route("config")]
+        public HttpResponseMessage GetConfig()
         {
             try
             {
