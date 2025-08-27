@@ -1119,17 +1119,13 @@ namespace ReferenceDataApi.Infrastructure
                 {
                     connection.Open();
                     
-                    // Query to find all backup tables and their metadata
+                    // First get all backup tables
                     var sql = @"
                         SELECT 
                             b.TABLE_NAME as backup_table_name,
                             REPLACE(b.TABLE_NAME, '_backup', '') as base_name,
                             CASE WHEN m.TABLE_NAME IS NOT NULL THEN 1 ELSE 0 END as has_main,
-                            CASE WHEN s.TABLE_NAME IS NOT NULL THEN 1 ELSE 0 END as has_stage,
-                            ISNULL(v.version_count, 0) as version_count,
-                            ISNULL(v.latest_version, 0) as latest_version,
-                            ISNULL(r.row_count, 0) as row_count,
-                            ISNULL(v.latest_created_date, GETDATE()) as created_date
+                            CASE WHEN s.TABLE_NAME IS NOT NULL THEN 1 ELSE 0 END as has_stage
                         FROM [" + _database + @"].INFORMATION_SCHEMA.TABLES b
                         LEFT JOIN [" + _database + @"].INFORMATION_SCHEMA.TABLES m ON 
                             m.TABLE_SCHEMA = '" + _dataSchema + @"' AND 
@@ -1137,18 +1133,6 @@ namespace ReferenceDataApi.Infrastructure
                         LEFT JOIN [" + _database + @"].INFORMATION_SCHEMA.TABLES s ON 
                             s.TABLE_SCHEMA = '" + _dataSchema + @"' AND 
                             s.TABLE_NAME = REPLACE(b.TABLE_NAME, '_backup', '') + '_stage'
-                        OUTER APPLY (
-                            SELECT 
-                                COUNT(DISTINCT ref_data_version_id) as version_count,
-                                MAX(ref_data_version_id) as latest_version,
-                                MAX(ref_data_loadtime) as latest_created_date
-                            FROM [" + _database + "].[" + _backupSchema + "].[\" + b.TABLE_NAME + @\"]
-                            WHERE ref_data_version_id IS NOT NULL
-                        ) v
-                        OUTER APPLY (
-                            SELECT COUNT(*) as row_count 
-                            FROM [" + _database + "].[" + _backupSchema + "].[\" + b.TABLE_NAME + @\"]
-                        ) r
                         WHERE b.TABLE_SCHEMA = '" + _backupSchema + @"' 
                             AND b.TABLE_NAME LIKE '%_backup'
                             AND b.TABLE_TYPE = 'BASE TABLE'";
@@ -1181,14 +1165,60 @@ namespace ReferenceDataApi.Infrastructure
                                     BaseName = baseName,
                                     HasMain = Convert.ToBoolean(reader["has_main"]),
                                     HasStage = Convert.ToBoolean(reader["has_stage"]),
-                                    VersionCount = Convert.ToInt32(reader["version_count"]),
-                                    LatestVersion = Convert.ToInt32(reader["latest_version"]),
-                                    RowCount = Convert.ToInt32(reader["row_count"]),
-                                    CreatedDate = Convert.ToDateTime(reader["created_date"]),
+                                    VersionCount = 0, // Will be populated separately
+                                    LatestVersion = 0, // Will be populated separately 
+                                    RowCount = 0, // Will be populated separately
+                                    CreatedDate = DateTime.UtcNow,
                                     Status = "active",
-                                    VersionId = Convert.ToInt32(reader["latest_version"])
+                                    VersionId = 0 // Will be populated separately
                                 });
                             }
+                        }
+                    }
+
+                    // Now get version and row count data for each backup table separately
+                    foreach (var backup in backups)
+                    {
+                        try
+                        {
+                            using (var connection2 = new SqlConnection(_connectionString))
+                            {
+                                connection2.Open();
+                                
+                                // Check if backup table exists and get metadata
+                                var metaQuery = string.Format(@"
+                                    IF EXISTS (SELECT 1 FROM [{0}].INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{1}' AND TABLE_NAME = '{2}')
+                                    BEGIN
+                                        SELECT 
+                                            ISNULL(COUNT(DISTINCT ref_data_version_id), 0) as version_count,
+                                            ISNULL(MAX(ref_data_version_id), 0) as latest_version,
+                                            ISNULL(COUNT(*), 0) as row_count,
+                                            ISNULL(MAX(ref_data_loadtime), GETDATE()) as latest_created_date
+                                        FROM [{0}].[{1}].[{2}]
+                                    END
+                                    ELSE
+                                    BEGIN
+                                        SELECT 0 as version_count, 0 as latest_version, 0 as row_count, GETDATE() as latest_created_date
+                                    END", _database, _backupSchema, backup.BackupTable);
+                                
+                                using (var metaCommand = new SqlCommand(metaQuery, connection2))
+                                using (var metaReader = metaCommand.ExecuteReader())
+                                {
+                                    if (metaReader.Read())
+                                    {
+                                        backup.VersionCount = Convert.ToInt32(metaReader["version_count"]);
+                                        backup.LatestVersion = Convert.ToInt32(metaReader["latest_version"]);
+                                        backup.RowCount = Convert.ToInt32(metaReader["row_count"]);
+                                        backup.CreatedDate = Convert.ToDateTime(metaReader["latest_created_date"]);
+                                        backup.VersionId = backup.LatestVersion ?? 0;
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception metaEx)
+                        {
+                            _logger.LogError("backup_metadata_error", "Failed to get metadata for " + backup.BackupTable + ": " + metaEx.Message);
+                            // Keep default values on error
                         }
                     }
                 }
