@@ -375,7 +375,9 @@ class FileMonitor:
     def run(self):
         """Main monitoring loop"""
         self.logger.info("File monitor started")
-        self.logger.info(f"Monitoring: {FULLLOAD_PATH} and {APPEND_PATH}")
+        self.logger.info(f"Monitoring reference data folders:")
+        self.logger.info(f"  - Reference data: {REF_DATA_BASE_PATH}")
+        self.logger.info(f"  - Non-reference data: {NON_REF_DATA_BASE_PATH}")
         self.logger.info(f"Check interval: {MONITOR_INTERVAL}s, Stability checks: {STABILITY_CHECKS}")
         
         try:
@@ -384,9 +386,9 @@ class FileMonitor:
                 csv_files = self.scan_folders()
                 
                 # Check each file for stability
-                for file_path, load_type in csv_files:
+                for file_path, load_type, is_reference_data in csv_files:
                     if self.check_file_stability(file_path):
-                        self.process_file(file_path, load_type)
+                        self.process_file(file_path, load_type, is_reference_data)
                         
                 # Cleanup tracking for removed files
                 self.cleanup_tracking()
