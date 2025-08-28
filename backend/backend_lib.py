@@ -40,7 +40,7 @@ class ReferenceDataAPI:
             self.logger.info(f"Detecting format for: {file_path}")
             
             # Use the existing CSV detector
-            detection_result = self.csv_detector.detect_csv_format(file_path)
+            detection_result = self.csv_detector.detect_format(file_path)
             
             return {
                 "success": True,
@@ -102,7 +102,8 @@ class ReferenceDataAPI:
     def extract_table_name_from_file(self, file_path: str) -> str:
         """Extract table name from file path using existing logic"""
         try:
-            return self.file_handler.extract_table_name(file_path)
+            filename = os.path.basename(file_path)
+            return self.file_handler.extract_table_base_name(filename)
         except Exception as e:
             self.logger.error(f"Table name extraction failed for {file_path}: {str(e)}")
             # Fallback to simple extraction
@@ -176,16 +177,48 @@ class ReferenceDataAPI:
         config_reference_data: bool = False
     ) -> Dict[str, Any]:
         """Synchronous wrapper for file processing"""
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         try:
-            return loop.run_until_complete(
-                self.process_file_async(
-                    file_path, load_type, table_name, target_schema, config_reference_data
+            # Try to get existing event loop
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If loop is running, we need to run in a thread or use different approach
+                import concurrent.futures
+                import threading
+                
+                def run_async():
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        return new_loop.run_until_complete(
+                            self.process_file_async(
+                                file_path, load_type, table_name, target_schema, config_reference_data
+                            )
+                        )
+                    finally:
+                        new_loop.close()
+                
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(run_async)
+                    return future.result()
+            else:
+                # Loop exists but not running, use it
+                return loop.run_until_complete(
+                    self.process_file_async(
+                        file_path, load_type, table_name, target_schema, config_reference_data
+                    )
                 )
-            )
-        finally:
-            loop.close()
+        except RuntimeError:
+            # No event loop exists, create one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(
+                    self.process_file_async(
+                        file_path, load_type, table_name, target_schema, config_reference_data
+                    )
+                )
+            finally:
+                loop.close()
     
     def get_table_info(self, table_name: str, schema: str = "ref") -> Dict[str, Any]:
         """Get information about a specific table"""

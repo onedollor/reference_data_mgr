@@ -7,7 +7,6 @@ Monitors dropoff folders for CSV files and processes them automatically.
 import os
 import sys
 import time
-import sqlite3
 import hashlib
 import logging
 from datetime import datetime
@@ -17,6 +16,7 @@ import re
 
 # Import the backend library
 from backend_lib import ReferenceDataAPI
+from utils.database import DatabaseManager
 
 # Configuration
 DROPOFF_BASE_PATH = "/home/lin/repo/reference_data_mgr/data/reference_data/dropoff"
@@ -25,23 +25,23 @@ DROPOFF_BASE_PATH = "/home/lin/repo/reference_data_mgr/data/reference_data/dropo
 REF_DATA_BASE_PATH = os.path.join(DROPOFF_BASE_PATH, "reference_data_table")
 NON_REF_DATA_BASE_PATH = os.path.join(DROPOFF_BASE_PATH, "none_reference_data_table")
 
-# Processing folders
-PROCESSED_PATH = os.path.join(DROPOFF_BASE_PATH, "processed")
-ERROR_PATH = os.path.join(DROPOFF_BASE_PATH, "error")
+# Processing folders - now organized by reference data type and load type
 
 # Monitor settings
 MONITOR_INTERVAL = 15  # seconds
 STABILITY_CHECKS = 6   # number of consecutive checks without size change
 LOG_FILE = "/home/lin/repo/reference_data_mgr/logs/file_monitor.log"
 
-# Database settings
-TRACKING_DB = "/home/lin/repo/reference_data_mgr/data/file_tracking.db"
+# Database settings - using SQL Server ref schema instead of SQLite
+TRACKING_TABLE = "File_Monitor_Tracking"
+TRACKING_SCHEMA = "ref"
 
 class FileMonitor:
     def __init__(self):
         self.setup_logging()
         self.setup_directories()
-        self.init_tracking_db()
+        self.db_manager = DatabaseManager()
+        self.init_tracking_table()
         self.file_tracking = {}  # {file_path: {'size': int, 'mtime': float, 'stable_count': int}}
         
         # Initialize backend API
@@ -66,33 +66,63 @@ class FileMonitor:
         self.logger = logging.getLogger(__name__)
         
     def setup_directories(self):
-        """Create necessary directories"""
-        for path in [PROCESSED_PATH, ERROR_PATH]:
-            os.makedirs(path, exist_ok=True)
+        """Create necessary directories - processed and error folders in each load type"""
+        # Create all necessary subdirectories
+        for ref_type in ['reference_data_table', 'none_reference_data_table']:
+            for load_type in ['fullload', 'append']:
+                base_path = os.path.join(DROPOFF_BASE_PATH, ref_type, load_type)
+                processed_path = os.path.join(base_path, 'processed')
+                error_path = os.path.join(base_path, 'error')
+                os.makedirs(processed_path, exist_ok=True)
+                os.makedirs(error_path, exist_ok=True)
+    
+    def get_processed_path(self, is_reference_data, load_type):
+        """Get the processed folder path for a specific file type"""
+        ref_type = 'reference_data_table' if is_reference_data else 'none_reference_data_table'
+        return os.path.join(DROPOFF_BASE_PATH, ref_type, load_type, 'processed')
+    
+    def get_error_path(self, is_reference_data, load_type):
+        """Get the error folder path for a specific file type"""
+        ref_type = 'reference_data_table' if is_reference_data else 'none_reference_data_table'
+        return os.path.join(DROPOFF_BASE_PATH, ref_type, load_type, 'error')
             
-    def init_tracking_db(self):
-        """Initialize SQLite database for tracking files"""
-        os.makedirs(os.path.dirname(TRACKING_DB), exist_ok=True)
-        with sqlite3.connect(TRACKING_DB) as conn:
-            conn.execute('''
-                CREATE TABLE IF NOT EXISTS file_processing (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    file_path TEXT UNIQUE,
-                    file_name TEXT,
-                    file_size INTEGER,
-                    file_hash TEXT,
-                    load_type TEXT,
-                    table_name TEXT,
-                    detected_delimiter TEXT,
-                    detected_headers TEXT,
-                    is_reference_data INTEGER,
-                    reference_config_inserted INTEGER DEFAULT 0,
-                    status TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    processed_at TIMESTAMP,
-                    error_message TEXT
+    def init_tracking_table(self):
+        """Initialize SQL Server table for tracking files in ref schema"""
+        try:
+            connection = self.db_manager.get_connection()
+            cursor = connection.cursor()
+            
+            # Create file monitoring tracking table
+            create_table_sql = f"""
+            IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = '{TRACKING_TABLE}' AND schema_id = SCHEMA_ID('{TRACKING_SCHEMA}'))
+            BEGIN
+                CREATE TABLE [{TRACKING_SCHEMA}].[{TRACKING_TABLE}] (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    file_path NVARCHAR(500) UNIQUE NOT NULL,
+                    file_name NVARCHAR(255),
+                    file_size BIGINT,
+                    file_hash NVARCHAR(64),
+                    load_type NVARCHAR(50),
+                    table_name NVARCHAR(255),
+                    detected_delimiter NVARCHAR(5),
+                    detected_headers NVARCHAR(MAX),
+                    is_reference_data BIT,
+                    reference_config_inserted BIT DEFAULT 0,
+                    status NVARCHAR(50),
+                    created_at DATETIME2 DEFAULT GETDATE(),
+                    processed_at DATETIME2,
+                    error_message NVARCHAR(MAX)
                 )
-            ''')
+            END
+            """
+            cursor.execute(create_table_sql)
+            connection.commit()
+            connection.close()
+            self.logger.info(f"File tracking table initialized in {TRACKING_SCHEMA}.{TRACKING_TABLE}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to initialize tracking table: {e}")
+            raise
             
     def scan_folders(self):
         """Scan all folders for CSV files with reference data classification"""
@@ -255,23 +285,45 @@ class FileMonitor:
             return None
             
     def record_processing(self, file_path, load_type, table_name, delimiter, headers, status, is_reference_data=False, reference_config_inserted=False, error_msg=None):
-        """Record file processing in database"""
+        """Record file processing in SQL Server database"""
         try:
             file_name = os.path.basename(file_path)
             file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
             file_hash = self.calculate_file_hash(file_path)
             headers_str = ','.join(headers) if headers else ''
             
-            with sqlite3.connect(TRACKING_DB) as conn:
-                conn.execute('''
-                    INSERT OR REPLACE INTO file_processing 
-                    (file_path, file_name, file_size, file_hash, load_type, table_name, 
-                     detected_delimiter, detected_headers, is_reference_data, reference_config_inserted,
-                     status, processed_at, error_message)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (file_path, file_name, file_size, file_hash, load_type, table_name,
-                      delimiter, headers_str, int(is_reference_data), int(reference_config_inserted),
-                      status, datetime.now().isoformat(), error_msg))
+            connection = self.db_manager.get_connection()
+            cursor = connection.cursor()
+            
+            # Use MERGE to insert or update record
+            merge_sql = f"""
+            MERGE [{TRACKING_SCHEMA}].[{TRACKING_TABLE}] AS target
+            USING (SELECT ? AS file_path) AS source ON target.file_path = source.file_path
+            WHEN MATCHED THEN
+                UPDATE SET 
+                    file_name = ?, file_size = ?, file_hash = ?, load_type = ?, 
+                    table_name = ?, detected_delimiter = ?, detected_headers = ?,
+                    is_reference_data = ?, reference_config_inserted = ?, status = ?,
+                    processed_at = GETDATE(), error_message = ?
+            WHEN NOT MATCHED THEN
+                INSERT (file_path, file_name, file_size, file_hash, load_type, table_name,
+                       detected_delimiter, detected_headers, is_reference_data, reference_config_inserted,
+                       status, processed_at, error_message)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE(), ?);
+            """
+            
+            cursor.execute(merge_sql, (
+                file_path,  # for USING clause
+                file_name, file_size, file_hash, load_type, table_name,
+                delimiter, headers_str, is_reference_data, reference_config_inserted,
+                status, error_msg,
+                file_path, file_name, file_size, file_hash, load_type, table_name,  # for INSERT
+                delimiter, headers_str, is_reference_data, reference_config_inserted,
+                status, error_msg
+            ))
+            
+            connection.commit()
+            connection.close()
                       
         except Exception as e:
             self.logger.error(f"Error recording processing for {file_path}: {e}")
@@ -316,7 +368,8 @@ class FileMonitor:
                         self.logger.error(f"Error inserting reference data config: {config_error}")
                 
                 # Move file to processed folder
-                processed_file_path = os.path.join(PROCESSED_PATH, os.path.basename(file_path))
+                processed_folder = self.get_processed_path(is_reference_data, load_type)
+                processed_file_path = os.path.join(processed_folder, os.path.basename(file_path))
                 os.rename(file_path, processed_file_path)
                 
                 # Record successful processing
@@ -342,7 +395,8 @@ class FileMonitor:
             
             # Move file to error folder
             try:
-                error_file_path = os.path.join(ERROR_PATH, os.path.basename(file_path))
+                error_folder = self.get_error_path(is_reference_data, load_type)
+                error_file_path = os.path.join(error_folder, os.path.basename(file_path))
                 os.rename(file_path, error_file_path)
                 
                 # Record failed processing
