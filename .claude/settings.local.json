@@ -47,5 +47,10 @@
       "Bash(sqlite3:*)"
     ],
     "deny": []
-  }
+  },
+  "enabledMcpjsonServers": [
+    "context7",
+    "playwright",
+    "sequential-thinking"
+  ]
 }
