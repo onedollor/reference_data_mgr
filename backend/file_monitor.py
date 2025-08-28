@@ -352,7 +352,7 @@ class FileMonitor:
                 except:
                     delimiter, headers, table_name = ',', [], 'unknown'
                     
-                self.record_processing(error_file_path, load_type, table_name, delimiter, headers, 'error', str(e))
+                self.record_processing(error_file_path, load_type, table_name, delimiter, headers, 'error', is_reference_data, False, str(e))
                 
             except Exception as move_error:
                 self.logger.error(f"Error moving failed file: {move_error}")
