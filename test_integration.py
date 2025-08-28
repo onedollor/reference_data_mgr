@@ -13,7 +13,7 @@ def test_backend_api():
     print("=" * 40)
     
     try:
-        from backend_lib import ReferenceDataAPI
+        from backend.backend_lib import ReferenceDataAPI
         
         # Initialize API
         print("1. Initializing backend API...")
@@ -52,7 +52,7 @@ def test_file_monitor():
     print("=" * 40)
     
     try:
-        from file_monitor import FileMonitor
+        from backend.file_monitor import FileMonitor
         
         print("1. Initializing file monitor...")
         monitor = FileMonitor()

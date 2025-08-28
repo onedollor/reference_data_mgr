@@ -10,10 +10,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import pandas as pd
 
-# Add backend to path
-backend_path = Path(__file__).parent / "backend"
-sys.path.insert(0, str(backend_path))
-
+# Import utilities directly (now in same directory structure)
 from utils.database import DatabaseManager
 from utils.ingest import DataIngester
 from utils.csv_detector import CSVDetector

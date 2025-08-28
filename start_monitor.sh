@@ -16,8 +16,8 @@ if [ $? -eq 0 ]; then
     echo "✓ Integration test passed. Starting file monitor..."
     echo ""
     echo "Monitoring directories:"
-    echo "  - Fullload: /home/lin/repo/reference_data_mgr/data/reference_data/dropoff/fullload/"
-    echo "  - Append:   /home/lin/repo/reference_data_mgr/data/reference_data/dropoff/append/"
+    echo "  - Reference data: /home/lin/repo/reference_data_mgr/data/reference_data/dropoff/reference_data_table/"
+    echo "  - Non-reference data: /home/lin/repo/reference_data_mgr/data/reference_data/dropoff/none_reference_data_table/"
     echo ""
     echo "Logs: logs/file_monitor.log"
     echo "Database tracking: data/file_tracking.db"
@@ -25,7 +25,7 @@ if [ $? -eq 0 ]; then
     echo "Press Ctrl+C to stop"
     echo "----------------------------------------"
     
-    python3 file_monitor.py
+    python3 backend/file_monitor.py
 else
     echo ""
     echo "❌ Integration test failed. Please fix the issues before starting the monitor."

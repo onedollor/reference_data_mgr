@@ -42,7 +42,8 @@
       "Bash(lsof:*)",
       "Bash(pip3 install:*)",
       "Bash(sudo apt install:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(sudo dpkg:*)"
     ],
     "deny": []
   }
