@@ -6,6 +6,7 @@ Unified API for data ingestion without HTTP server dependency
 import os
 import sys
 import asyncio
+import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import pandas as pd
@@ -13,30 +14,30 @@ import pandas as pd
 # Import utilities directly (now in same directory structure)
 from utils.database import DatabaseManager
 from utils.ingest import DataIngester
-from utils.csv_detector import CSVDetector
+from utils.csv_detector import CSVFormatDetector
 from utils.file_handler import FileHandler
 from utils.logger import Logger
-from utils.progress import ProgressTracker
+import utils.progress as progress_utils
 
 class ReferenceDataAPI:
     """Unified API for reference data operations without HTTP dependency"""
     
     def __init__(self, logger: Optional[Logger] = None):
         """Initialize the API with optional logger"""
-        if logger is None:
-            logger = Logger()
-        
-        self.logger = logger
+        # Set up logging
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        self.logger = logging.getLogger(__name__)
+        self.async_logger = logger  # Keep reference to async logger if provided
         self.db_manager = DatabaseManager()
-        self.data_ingester = DataIngester(self.db_manager, self.logger)
-        self.csv_detector = CSVDetector(self.logger)
+        self.data_ingester = DataIngester(self.db_manager, logger)
+        self.csv_detector = CSVFormatDetector()
         self.file_handler = FileHandler()
-        self.progress_tracker = ProgressTracker()
+        self.progress_utils = progress_utils
         
     def detect_format(self, file_path: str) -> Dict[str, Any]:
         """Detect CSV format and return analysis"""
         try:
-            self.logger.log_info(f"Detecting format for: {file_path}")
+            self.logger.info(f"Detecting format for: {file_path}")
             
             # Use the existing CSV detector
             detection_result = self.csv_detector.detect_csv_format(file_path)
@@ -48,7 +49,7 @@ class ReferenceDataAPI:
             }
             
         except Exception as e:
-            self.logger.log_error(f"Format detection failed for {file_path}: {str(e)}")
+            self.logger.error(f"Format detection failed for {file_path}: {str(e)}")
             return {
                 "success": False,
                 "error": str(e),
@@ -92,7 +93,7 @@ class ReferenceDataAPI:
             }
             
         except Exception as e:
-            self.logger.log_error(f"Schema analysis failed: {str(e)}")
+            self.logger.error(f"Schema analysis failed: {str(e)}")
             return {
                 "success": False,
                 "error": str(e)
@@ -103,7 +104,7 @@ class ReferenceDataAPI:
         try:
             return self.file_handler.extract_table_name(file_path)
         except Exception as e:
-            self.logger.log_error(f"Table name extraction failed for {file_path}: {str(e)}")
+            self.logger.error(f"Table name extraction failed for {file_path}: {str(e)}")
             # Fallback to simple extraction
             import re
             file_name = Path(file_path).stem
@@ -128,8 +129,8 @@ class ReferenceDataAPI:
             if table_name is None:
                 table_name = self.extract_table_name_from_file(file_path)
             
-            self.logger.log_info(f"Processing file: {file_path}")
-            self.logger.log_info(f"Table: {table_name}, Load type: {load_type}, Schema: {target_schema}")
+            self.logger.info(f"Processing file: {file_path}")
+            self.logger.info(f"Table: {table_name}, Load type: {load_type}, Schema: {target_schema}")
             
             # Create format file path (temporary)
             fmt_file_path = f"{file_path}.fmt"
@@ -158,7 +159,7 @@ class ReferenceDataAPI:
             }
             
         except Exception as e:
-            self.logger.log_error(f"File processing failed for {file_path}: {str(e)}")
+            self.logger.error(f"File processing failed for {file_path}: {str(e)}")
             return {
                 "success": False,
                 "error": str(e),
@@ -210,7 +211,7 @@ class ReferenceDataAPI:
                 }
                 
         except Exception as e:
-            self.logger.log_error(f"Failed to get table info for {schema}.{table_name}: {str(e)}")
+            self.logger.error(f"Failed to get table info for {schema}.{table_name}: {str(e)}")
             return {
                 "success": False,
                 "error": str(e),
@@ -227,7 +228,7 @@ class ReferenceDataAPI:
                 "tables": tables
             }
         except Exception as e:
-            self.logger.log_error(f"Failed to get all tables: {str(e)}")
+            self.logger.error(f"Failed to get all tables: {str(e)}")
             return {
                 "success": False,
                 "error": str(e)
@@ -284,7 +285,7 @@ class ReferenceDataAPI:
                 self.db_manager.insert_reference_data_cfg_record(connection, table_name)
                 connection.commit()
                 
-                self.logger.log_info(f"Reference data config record inserted for table: {table_name}")
+                self.logger.info(f"Reference data config record inserted for table: {table_name}")
                 return {
                     "success": True,
                     "message": f"Reference data config record created for {table_name}"
@@ -293,7 +294,7 @@ class ReferenceDataAPI:
                 connection.close()
                 
         except Exception as e:
-            self.logger.log_error(f"Failed to insert reference data config for {table_name}: {str(e)}")
+            self.logger.error(f"Failed to insert reference data config for {table_name}: {str(e)}")
             return {
                 "success": False,
                 "error": str(e)

@@ -5,6 +5,8 @@ Unified logging system for the Reference Data Auto Ingest System
 import os
 import json
 import traceback
+import asyncio
+import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 try:
@@ -450,3 +452,4 @@ class DatabaseLogger(Logger):
             print(f"Database log retrieval failed: {str(e)}")
             # Fallback to file-based logging
             return await super().get_logs(limit)
+    
