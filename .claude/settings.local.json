@@ -44,7 +44,8 @@
       "Bash(sudo apt install:*)",
       "Bash(mv:*)",
       "Bash(sudo dpkg:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(dd:*)"
     ],
     "deny": []
   },
