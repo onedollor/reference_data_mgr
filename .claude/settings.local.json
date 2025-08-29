@@ -45,7 +45,8 @@
       "Bash(mv:*)",
       "Bash(sudo dpkg:*)",
       "Bash(sqlite3:*)",
-      "Bash(dd:*)"
+      "Bash(dd:*)",
+      "Bash(./run_tests.sh)"
     ],
     "deny": []
   },

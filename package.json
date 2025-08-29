@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "@modelcontextprotocol/server-sequential-thinking": "^2025.7.1",
-    "form-data": "^4.0.4"
-  }
-}
