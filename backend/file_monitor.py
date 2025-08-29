@@ -205,9 +205,9 @@ class FileMonitor:
                 detected_format = result["detected_format"]
                 
                 # Extract the information we need
-                delimiter = detected_format.get("delimiter", ",")
-                headers = detected_format.get("headers", [])
-                sample_rows = detected_format.get("sample_rows", [])
+                delimiter = detected_format.get("column_delimiter", ",")
+                headers = detected_format.get("sample_data", [[]])[0] if detected_format.get("sample_data") else []
+                sample_rows = detected_format.get("sample_data", [])
                 
                 self.logger.info(f"Backend detected format - Delimiter: '{delimiter}', Headers: {len(headers)} columns")
                 return delimiter, headers, sample_rows

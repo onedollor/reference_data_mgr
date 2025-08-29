@@ -141,7 +141,7 @@ class ReferenceDataAPI:
             
             # Detect CSV format first
             format_info = self.detect_format(file_path)
-            delimiter = format_info.get("delimiter", ",")
+            delimiter = format_info["detected_format"].get("column_delimiter", ",")
             
             # Create format file with detected CSV format
             fmt_file_path = f"{file_path}.fmt"

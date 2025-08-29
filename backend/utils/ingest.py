@@ -588,7 +588,7 @@ class DataIngester:
             # Read CSV with pandas
             # For complex row delimiters, let pandas auto-detect line endings
             pandas_kwargs = {
-                'delimiter': delimiter,
+                'sep': delimiter,
                 'quotechar': text_qualifier if text_qualifier else None,
                 'skiprows': skip_lines,
                 'dtype': str,  # Read everything as string
