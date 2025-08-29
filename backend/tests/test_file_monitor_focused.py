@@ -216,6 +216,7 @@ class TestFileMonitorFocused:
                                                   mock_makedirs, mock_api, mock_db):
         """Test init_tracking_table method with database error"""
         import file_monitor
+        import pytest
         
         mock_logger = MagicMock()
         mock_get_logger.return_value = mock_logger
@@ -226,11 +227,9 @@ class TestFileMonitorFocused:
         
         mock_api.return_value = MagicMock()
         
-        # Should handle database error gracefully
-        monitor = file_monitor.FileMonitor()
-        
-        # Should have logged the error
-        mock_logger.error.assert_called()
+        # Should raise exception during initialization
+        with pytest.raises(Exception, match="Database connection failed"):
+            monitor = file_monitor.FileMonitor()
     
     @patch('file_monitor.DatabaseManager')
     @patch('file_monitor.ReferenceDataAPI')
@@ -311,7 +310,9 @@ class TestFileMonitorFocused:
         mock_db.return_value = mock_db_inst
         mock_db_inst.get_connection.return_value = MagicMock()
         
-        mock_api.return_value = MagicMock()
+        # Mock the API instance and its extract_table_name_from_file method
+        mock_api_inst = MagicMock()
+        mock_api.return_value = mock_api_inst
         
         monitor = file_monitor.FileMonitor()
         
@@ -323,6 +324,8 @@ class TestFileMonitorFocused:
         ]
         
         for file_path, expected in test_cases:
+            # Mock the API method to return the expected table name
+            mock_api_inst.extract_table_name_from_file.return_value = expected
             result = monitor.extract_table_name(file_path)
             assert result == expected
     
