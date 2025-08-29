@@ -8,6 +8,7 @@ import sys
 import asyncio
 import logging
 from pathlib import Path
+from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 import pandas as pd
 
@@ -27,7 +28,12 @@ class ReferenceDataAPI:
         # Set up logging
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         self.logger = logging.getLogger(__name__)
-        self.async_logger = logger  # Keep reference to async logger if provided
+        
+        # Create async logger if not provided
+        if logger is None:
+            logger = Logger()
+        self.async_logger = logger
+        
         self.db_manager = DatabaseManager()
         self.data_ingester = DataIngester(self.db_manager, logger)
         self.csv_detector = CSVFormatDetector()
@@ -133,11 +139,45 @@ class ReferenceDataAPI:
             self.logger.info(f"Processing file: {file_path}")
             self.logger.info(f"Table: {table_name}, Load type: {load_type}, Schema: {target_schema}")
             
-            # Create format file path (temporary)
+            # Detect CSV format first
+            format_info = self.detect_format(file_path)
+            delimiter = format_info.get("delimiter", ",")
+            
+            # Create format file with detected CSV format
             fmt_file_path = f"{file_path}.fmt"
             
-            # Use the existing data ingester
-            result = await self.data_ingester.ingest_data(
+            # Create format configuration based on detected format
+            format_config = {
+                "file_info": {
+                    "original_filename": Path(file_path).name,
+                    "upload_timestamp": datetime.now().isoformat(),
+                    "format_version": "1.0"
+                },
+                "csv_format": {
+                    "header_delimiter": delimiter,
+                    "column_delimiter": delimiter,
+                    "row_delimiter": "\\n",
+                    "text_qualifier": "\"",
+                    "skip_lines": 0,
+                    "has_header": True,
+                    "has_trailer": False,
+                    "trailer_line": None
+                },
+                "processing_options": {
+                    "encoding": "utf-8",
+                    "skip_blank_lines": True,
+                    "strip_whitespace": True
+                }
+            }
+            
+            # Write format file
+            import json
+            with open(fmt_file_path, 'w', encoding='utf-8') as f:
+                json.dump(format_config, f, indent=2)
+            
+            # Use the existing data ingester (it's an async generator)
+            messages = []
+            async for message in self.data_ingester.ingest_data(
                 file_path=file_path,
                 fmt_file_path=fmt_file_path,
                 load_mode=load_type,
@@ -145,7 +185,11 @@ class ReferenceDataAPI:
                 override_load_type=load_type,
                 config_reference_data=config_reference_data,
                 target_schema=target_schema
-            )
+            ):
+                messages.append(message)
+                self.logger.info(f"Ingestion progress: {message}")
+            
+            result = messages
             
             # Clean up temporary format file
             if os.path.exists(fmt_file_path):
