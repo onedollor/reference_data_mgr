@@ -46,7 +46,8 @@
       "Bash(sudo dpkg:*)",
       "Bash(sqlite3:*)",
       "Bash(dd:*)",
-      "Bash(./run_tests.sh)"
+      "Bash(./run_tests.sh)",
+      "Bash(timeout:*)"
     ],
     "deny": []
   },
