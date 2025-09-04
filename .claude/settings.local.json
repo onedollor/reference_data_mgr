@@ -47,7 +47,9 @@
       "Bash(sqlite3:*)",
       "Bash(dd:*)",
       "Bash(./run_tests.sh)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(sed:*)",
+      "Bash(awk:*)"
     ],
     "deny": []
   },
