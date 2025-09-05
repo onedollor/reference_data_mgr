@@ -211,7 +211,7 @@ async def test_core_workflow_column_mapping_scenarios(ingester):
          patch('utils.progress.is_canceled', return_value=False), \
          patch('utils.progress.update_progress'), \
          patch('utils.progress.mark_done'), \
-         patch('utils.data_validation.validate_data', return_value=validation_result), \
+         patch.object(ingester.db_manager, 'execute_validation_procedure', return_value=validation_result), \
          patch.object(ingester.file_handler, 'read_format_file', return_value=mock_format), \
          patch('pandas.read_csv', return_value=test_df), \
          patch.object(ingester, '_load_dataframe_to_table'):
@@ -254,7 +254,7 @@ async def test_core_workflow_backup_creation(ingester):
          patch('utils.progress.is_canceled', return_value=False), \
          patch('utils.progress.update_progress'), \
          patch('utils.progress.mark_done'), \
-         patch('utils.data_validation.validate_data', return_value=validation_result), \
+         patch.object(ingester.db_manager, 'execute_validation_procedure', return_value=validation_result), \
          patch.object(ingester.file_handler, 'read_format_file', return_value=mock_format), \
          patch('pandas.read_csv', return_value=test_df), \
          patch.object(ingester, '_load_dataframe_to_table'):
@@ -293,7 +293,7 @@ async def test_core_workflow_append_mode(ingester):
          patch('utils.progress.is_canceled', return_value=False), \
          patch('utils.progress.update_progress'), \
          patch('utils.progress.mark_done'), \
-         patch('utils.data_validation.validate_data', return_value=validation_result), \
+         patch.object(ingester.db_manager, 'execute_validation_procedure', return_value=validation_result), \
          patch.object(ingester.file_handler, 'read_format_file', return_value=mock_format), \
          patch('pandas.read_csv', return_value=test_df), \
          patch.object(ingester, '_load_dataframe_to_table'):
@@ -332,7 +332,7 @@ async def test_core_workflow_reference_data_config_error(ingester):
          patch('utils.progress.is_canceled', return_value=False), \
          patch('utils.progress.update_progress'), \
          patch('utils.progress.mark_done'), \
-         patch('utils.data_validation.validate_data', return_value=validation_result), \
+         patch.object(ingester.db_manager, 'execute_validation_procedure', return_value=validation_result), \
          patch.object(ingester.file_handler, 'read_format_file', return_value=mock_format), \
          patch('pandas.read_csv', return_value=test_df), \
          patch.object(ingester, '_load_dataframe_to_table'):
@@ -363,7 +363,7 @@ async def test_core_workflow_cancellation_checkpoints(ingester):
     with patch('utils.progress.init_progress'), \
          patch('utils.progress.is_canceled', side_effect=[False, False, False, False, True]), \
          patch('utils.progress.mark_error'), \
-         patch('utils.data_validation.validate_data', return_value=validation_result), \
+         patch.object(ingester.db_manager, 'execute_validation_procedure', return_value=validation_result), \
          patch.object(ingester.file_handler, 'read_format_file', return_value=mock_format), \
          patch('pandas.read_csv', return_value=test_df), \
          patch.object(ingester, '_load_dataframe_to_table'):
