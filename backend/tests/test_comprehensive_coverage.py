@@ -73,11 +73,43 @@ from test_ingest_final_push import TestDataIngesterFinalPush
 from test_ingest_working_comprehensive import TestDataIngesterWorking
 from test_ingest_final_push_70 import TestDataIngesterFinalPush70
 from test_ingest_simple_push import TestDataIngesterSimplePush
-from test_ingest_final_90_push import TestDataIngesterFinal90Push
+# test_ingest_final_90_push uses function-based tests, not class-based
+from test_ingest_final_90_push import (
+    test_header_edge_cases_comprehensive,
+    test_type_inference_edge_cases,
+    test_environment_variable_comprehensive
+)
 from test_ingest_push_to_90_systematic import TestDataIngesterSystematic90
 from test_ingest_push_to_90 import TestDataIngesterPushTo90
 # from test_ingest_80_percent_target import TestDataIngester80Percent  # No class-based tests in this file
 from test_ingest_final_70_plus import TestDataIngesterFinal70Plus
+
+# BREAKTHROUGH: Core workflow coverage tests for major 372-535 block
+from test_ingest_core_workflow_coverage import (
+    test_complete_core_workflow_validation_success,
+    test_core_workflow_validation_failure
+)
+
+# Strategic final coverage push tests
+from test_ingest_final_coverage_push import (
+    test_type_inference_varchar_sizing_lines_290_292_294,
+    test_header_processing_numeric_prefix_lines_297_298,
+    test_deduplicate_headers_edge_cases_lines_332_333
+)
+
+# Strategic coverage boost tests
+from test_ingest_coverage_boost import (
+    test_header_sanitization_edge_cases_lines_297_298,
+    test_comprehensive_ingestion_workflow,
+    test_batch_processing_progress_lines_182_183_195_196
+)
+
+# Strategic final tests
+from test_ingest_strategic_final import (
+    test_ingestion_error_scenarios,
+    test_empty_csv_handling,
+    test_type_inference_edge_cases_comprehensive
+)
 
 # NEW OPTIMIZED FUNCTION TESTS - Import the best-performing function tests directly
 from test_ingest_70_percent_final_push import (
@@ -227,10 +259,32 @@ __all__ = [
     'TestDataIngesterWorking',
     'TestDataIngesterFinalPush70',
     'TestDataIngesterSimplePush',
-    'TestDataIngesterFinal90Push',
+    # Function-based tests from test_ingest_final_90_push
+    'test_header_edge_cases_comprehensive',
+    'test_type_inference_edge_cases', 
+    'test_environment_variable_comprehensive',
     'TestDataIngesterSystematic90',
     'TestDataIngesterPushTo90',
     'TestDataIngesterFinal70Plus',
+    
+    # BREAKTHROUGH: Core workflow coverage functions for major 372-535 block
+    'test_complete_core_workflow_validation_success',
+    'test_core_workflow_validation_failure',
+    
+    # Strategic final coverage push functions
+    'test_type_inference_varchar_sizing_lines_290_292_294',
+    'test_header_processing_numeric_prefix_lines_297_298', 
+    'test_deduplicate_headers_edge_cases_lines_332_333',
+    
+    # Strategic coverage boost functions
+    'test_header_sanitization_edge_cases_lines_297_298',
+    'test_comprehensive_ingestion_workflow',
+    'test_batch_processing_progress_lines_182_183_195_196',
+    
+    # Strategic final functions
+    'test_ingestion_error_scenarios',
+    'test_empty_csv_handling',
+    'test_type_inference_edge_cases_comprehensive',
     
     # NEW OPTIMIZED FUNCTION TESTS for maximum 59% coverage
     'test_comprehensive_error_scenarios',
