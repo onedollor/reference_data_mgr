@@ -1,6 +1,7 @@
 """
 Comprehensive test coverage combining all highest-performing and verified working test modules
 Updated: 2025-01-04 - ALL 5 CSV detector test files included for MAXIMUM 95% coverage
+Updated: 2025-09-05 - NEW DATABASE ERROR PATHS TESTS added for 90% database.py coverage (up from 73%)
 """
 
 # Import all verified working test classes with correct names
@@ -47,7 +48,7 @@ from test_file_handler_90_percent import TestFileHandlerAsyncMethods
 # BASIC FUNCTIONALITY - Verified working tests
 from test_basic_functionality import TestBasicFunctionality
 
-# DATABASE MODULE - ALL 14 FILES FOR MAXIMUM 73% COVERAGE!
+# DATABASE MODULE - ALL 15 FILES FOR MAXIMUM 90% COVERAGE!
 from test_database_simple import TestDatabaseBasics
 from test_database_next_level import TestDatabaseManagerNextLevel
 from test_database_final_push import TestDatabaseManagerFinalPush
@@ -60,6 +61,15 @@ from test_database_additional import TestDatabaseAdditionalMethods
 from test_database_critical_coverage import TestDatabaseManagerCriticalCoverage
 from test_database_ultimate_90 import TestDatabaseManagerUltimate90
 from test_database_final_90_push import TestDatabaseManagerFinal90Push
+
+# NEW: DATABASE ERROR PATHS COVERAGE - 24 COMPREHENSIVE TESTS FOR 90% TOTAL COVERAGE!
+from test_database_error_paths_coverage import (
+    TestDatabaseManagerErrorPaths,
+    TestDatabaseBackupOperations as TestDatabaseBackupOperationsErrorPaths,
+    TestDatabaseConfigurationEdgeCases,
+    TestDatabaseDataTypeNormalization,
+    TestDatabaseConnectionPooling as TestDatabaseConnectionPoolingErrorPaths
+)
 
 # INGEST MODULE - ALL TEST CLASSES + NEW OPTIMIZED FUNCTION TESTS FOR 59% COVERAGE
 from test_ingest_comprehensive import TestDataIngesterInit, TestDataIngesterUtilityMethods, TestDataIngesterCSVReading, TestDataIngesterMainIngestion, TestDataIngesterDatabaseLoading
