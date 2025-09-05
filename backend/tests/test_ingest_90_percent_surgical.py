@@ -38,13 +38,13 @@ def test_sanitize_headers_edge_cases():
     mock_logger = MagicMock()
     ingester = DataIngester(mock_db, mock_logger)
     
-    # Test with empty string header (lines 112-113)
+    # Test with empty string header (lines 112-113)  
     headers_with_empty = ['valid_col', '', 'another_col']
     result = ingester._sanitize_headers(headers_with_empty)
     
     assert len(result) == 3
     assert result[0] == 'valid_col'
-    assert result[1].startswith('col_')  # Empty string gets prefixed
+    assert result[1] == ''  # Empty string returns empty (filtered later)
     assert result[2] == 'another_col'
     
     # Test with very long header name (line 124 - truncation)
