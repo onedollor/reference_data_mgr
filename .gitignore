@@ -9,6 +9,7 @@ __pycache__/
 venv/
 .env
 .env.*
+backend/test_env/
 
 # Node / frontend
 frontend/node_modules/
