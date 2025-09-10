@@ -27,8 +27,9 @@
       ]
     },
     "spec-workflow": {
+      "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "/path/to/your/project", "--AutoStartDashboard", "--port", "3456"]
+      "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "/home/lin/repo/reference_data_mgr", "--AutoStartDashboard", "--port", "3456"]
     }
   }
 }
