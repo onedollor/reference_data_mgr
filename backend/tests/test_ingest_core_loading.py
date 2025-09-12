@@ -37,7 +37,7 @@ class TestDataIngesterCoreLoading:
     
     @pytest.mark.asyncio
     async def test_load_dataframe_full_mode_new_table(self):
-        """Test full load mode with new table creation - covers lines 214-280"""
+        """Test fullload mode with new table creation - covers lines 214-280"""
         df = pd.DataFrame({
             'id': [1, 2, 3],
             'name': ['John', 'Jane', 'Bob'],
@@ -75,7 +75,7 @@ class TestDataIngesterCoreLoading:
     
     @pytest.mark.asyncio
     async def test_load_dataframe_full_mode_existing_table(self):
-        """Test full load mode with existing table - covers backup paths"""
+        """Test fullload mode with existing table - covers backup paths"""
         df = pd.DataFrame({
             'id': [1, 2, 3],
             'name': ['A', 'B', 'C']
@@ -132,7 +132,7 @@ class TestDataIngesterCoreLoading:
                 messages.append(message)
             
             # Should handle append mode correctly
-            assert any("Append mode: main table already has 50 rows" in msg for msg in messages)
+            assert any("append mode: main table already has 50 rows" in msg for msg in messages)
     
     @pytest.mark.asyncio
     async def test_load_dataframe_cancellation_during_table_ops(self):

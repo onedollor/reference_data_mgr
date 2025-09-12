@@ -138,7 +138,7 @@ class TestIngestFinalPush90:
         
         mock_df = pd.DataFrame({'name': ['John'], 'age': ['30']})
         
-        # Append mode setup
+        # append mode setup
         self.mock_db_manager.table_exists.return_value = True
         self.mock_db_manager.get_row_count.return_value = 500
         self.mock_db_manager.create_table = MagicMock()

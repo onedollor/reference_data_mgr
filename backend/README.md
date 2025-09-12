@@ -40,10 +40,10 @@ The File Monitor is a production-ready CSV file processing system that automatic
 /home/lin/repo/reference_data_mgr/data/reference_data/dropoff/
 ├── reference_data_table/
 │   ├── fullload/     # Full table replacement
-│   └── append/       # Append to existing data
+│   └── append/       # append to existing data
 └── none_reference_data_table/
     ├── fullload/     # Full table replacement  
-    └── append/       # Append to existing data
+    └── append/       # append to existing data
 ```
 
 ### Processing Flow

@@ -471,7 +471,7 @@ class TestDataIngester90Percent:
             ):
                 messages.append(message)
             
-            assert any('Append mode' in msg for msg in messages)
+            assert any('append mode' in msg for msg in messages)
     
     def test_sanitize_headers(self):
         """Test header sanitization"""

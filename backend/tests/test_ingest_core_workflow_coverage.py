@@ -305,7 +305,7 @@ async def test_core_workflow_append_mode(ingester):
             messages.append(message)
         
         # Should handle append mode properly
-        assert any("Append mode: will insert new rows into existing main table" in msg for msg in messages)
+        assert any("append mode: will insert new rows into existing main table" in msg for msg in messages)
         assert any("Data successfully appended: 2 new rows" in msg for msg in messages)
 
 

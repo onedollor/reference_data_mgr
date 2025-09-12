@@ -181,7 +181,7 @@ class TestIngestStrategic90Percent:
     @pytest.mark.asyncio
     async def test_full_load_table_preparation(self):
         """
-        TARGET: Lines 244-271 (28 lines) - Table preparation for full load mode
+        TARGET: Lines 244-271 (28 lines) - Table preparation for fullload mode
         Test the table structure sync and preparation workflow
         """
         
@@ -193,7 +193,7 @@ class TestIngestStrategic90Percent:
         
         mock_df = pd.DataFrame({'name': ['John'], 'age': ['30'], 'new_col': ['value']})
         
-        # Mock existing table with data (full load mode)
+        # Mock existing table with data (fullload mode)
         self.mock_db_manager.table_exists.return_value = True
         self.mock_db_manager.get_table_row_count.return_value = 500  # Existing data
         self.mock_db_manager.create_table = MagicMock()
@@ -231,19 +231,19 @@ class TestIngestStrategic90Percent:
             async for message in self.ingester.ingest_data(
                 file_path="/test/data.csv",
                 fmt_file_path="/test/format.json",
-                load_mode="full",  # This triggers the full load preparation
+                load_mode="full",  # This triggers the fullload preparation
                 filename="test_data.csv"
             ):
                 results.append(message)
         
         # Verify table preparation messages (lines 244-271)
-        assert any("Full load mode: preserving existing main table structure" in msg for msg in results)  # Line 244
+        assert any("fullload mode: preserving existing main table structure" in msg for msg in results)  # Line 244
         assert any("Added missing metadata columns" in msg and "load_timestamp" in msg for msg in results)  # Line 249
         assert any("Added 1 missing columns from input file" in msg and "new_col" in msg for msg in results)  # Line 257
         assert any("1 columns have different types" in msg for msg in results)  # Line 259
         assert any("table=int, file=varchar(10)" in msg for msg in results)  # Line 261
-        assert any("Full load mode: truncating 500 existing rows" in msg for msg in results)  # Line 269
-        assert any("Main table data cleared for full load" in msg for msg in results)  # Line 271
+        assert any("fullload mode: truncating 500 existing rows" in msg for msg in results)  # Line 269
+        assert any("Main table data cleared for fullload" in msg for msg in results)  # Line 271
         
         # Verify key operations were called
         self.mock_db_manager.ensure_metadata_columns.assert_called()

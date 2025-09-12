@@ -351,7 +351,7 @@ async def test_load_dataframe_to_table_scenarios():
 
 
 async def test_full_load_mode_scenarios():
-    """Test full load mode paths - covers lines around 240-271"""
+    """Test fullload mode paths - covers lines around 240-271"""
     mock_db = MagicMock()
     mock_logger = MagicMock()
     
@@ -424,7 +424,7 @@ async def test_full_load_mode_scenarios():
                         async for message in ingester.ingest_data(csv_file, fmt_file, "full", "test.csv"):
                             messages.append(message)
                         
-                        # Should include full load messages
+                        # Should include fullload messages
                         full_messages = [msg for msg in messages if "full" in msg.lower()]
                         assert len(full_messages) > 0
     

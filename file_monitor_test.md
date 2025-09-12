@@ -95,7 +95,7 @@ This document outlines comprehensive test cases for the file monitoring system t
 **Expected:** File processed with fullload mode, config record inserted  
 **Status:** [ ]
 
-### Test 12: Reference Data Append
+### Test 12: Reference Data append
 **Objective:** Verify processing of files in reference_data_table/append/  
 **Steps:** Drop CSV file in reference_data_table/append/  
 **Expected:** File processed with append mode, config record inserted  
@@ -107,7 +107,7 @@ This document outlines comprehensive test cases for the file monitoring system t
 **Expected:** File processed with fullload mode, no config record inserted  
 **Status:** [ ]
 
-### Test 14: Non-Reference Data Append
+### Test 14: Non-Reference Data append
 **Objective:** Verify processing of files in none_reference_data_table/append/  
 **Steps:** Drop CSV file in none_reference_data_table/append/  
 **Expected:** File processed with append mode, no config record inserted  

@@ -180,7 +180,7 @@ class TestIngestFinal90Percent:
         assert any("Added missing metadata columns" in msg for msg in results), "Should add metadata columns"
         assert any("Added 3 missing columns from input file" in msg for msg in results), "Should add missing columns"
         assert any("2 columns have different types" in msg for msg in results), "Should report type mismatches"
-        assert any("Full load mode: truncating 500 existing rows" in msg for msg in results), "Should truncate"
+        assert any("fullload mode: truncating 500 existing rows" in msg for msg in results), "Should truncate"
         assert any("Data validation passed" in msg for msg in results), "Should validate data"
         assert any("Moving data from stage to main table" in msg for msg in results), "Should transfer data"
         assert any("Transferring 7 matching columns" in msg for msg in results), "Should transfer columns"

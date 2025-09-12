@@ -1149,7 +1149,7 @@ class DatabaseManager:
             # If user provided override, use it
             if override_load_type:
                 override_upper = override_load_type.strip().upper()
-                if override_upper in ['F', 'A', 'FULL', 'APPEND']:
+                if override_upper in ['F', 'A', 'FULL', 'append']:
                     return 'F' if override_upper in ['F', 'FULL'] else 'A'
             cursor = connection.cursor()
             

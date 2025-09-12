@@ -204,7 +204,7 @@ class TestIngestBreakthrough90:
     @pytest.mark.asyncio
     async def test_full_load_table_preparation(self):
         """
-        TARGET: Lines 244-271 (28 lines) - Full load table preparation
+        TARGET: Lines 244-271 (28 lines) - fullload table preparation
         """
         
         self.ingester.file_handler.extract_table_base_name = MagicMock(return_value="test_table")
@@ -217,7 +217,7 @@ class TestIngestBreakthrough90:
             'new_col': ['data']  # This should trigger column addition
         })
         
-        # Existing table with data (triggers full load preparation)
+        # Existing table with data (triggers fullload preparation)
         self.mock_db_manager.table_exists.return_value = True
         self.mock_db_manager.get_row_count.return_value = 1500
         
@@ -258,10 +258,10 @@ class TestIngestBreakthrough90:
                 results.append(message)
         
         # Verify table preparation messages
-        assert any("Full load mode: preserving existing main table structure" in msg for msg in results)
+        assert any("fullload mode: preserving existing main table structure" in msg for msg in results)
         assert any("Added missing metadata columns" in msg for msg in results)
         assert any("Added 1 missing columns from input file" in msg for msg in results)
-        assert any("Full load mode: truncating 1500 existing rows" in msg for msg in results)
+        assert any("fullload mode: truncating 1500 existing rows" in msg for msg in results)
         
         # Verify database operations
         self.mock_db_manager.ensure_metadata_columns.assert_called()

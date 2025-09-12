@@ -117,7 +117,7 @@ class TestDataIngesterFinalPush70:
                 messages.append(message)
             
             # Should create new main table
-            assert any("Full load mode: main table does not exist, creating new main table" in msg for msg in messages)
+            assert any("fullload mode: main table does not exist, creating new main table" in msg for msg in messages)
             self.mock_db.create_table.assert_called()
     
     @pytest.mark.asyncio

@@ -86,7 +86,7 @@ class TestIngestFinalPush90Percent:
         assert any("Database connection established" in msg for msg in results)
         assert any("CSV file loaded" in msg for msg in results)
         assert any("validation passed" in msg.lower() for msg in results)
-        assert any("full load" in msg.lower() for msg in results)
+        assert any("fullload" in msg.lower() for msg in results)
         assert any("Data ingestion completed" in msg for msg in results)
         
         # Verify key database operations were called
@@ -178,7 +178,7 @@ class TestIngestFinalPush90Percent:
                 results.append(message)
         
         # Should have append-specific messages
-        assert any("Append mode" in msg for msg in results)
+        assert any("append mode" in msg for msg in results)
         assert any("insert new rows" in msg for msg in results)
         
         # Should NOT call backup_table for append mode

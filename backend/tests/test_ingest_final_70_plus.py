@@ -144,7 +144,7 @@ class TestDataIngesterFinal70Plus:
             
             # Should hit validation success paths (lines 385-411)
             assert any("Data validation passed" in msg for msg in messages)
-            assert any("Preparing for full load" in msg for msg in messages)
+            assert any("Preparing for fullload" in msg for msg in messages)
             assert any("Moving data from stage to main table" in msg for msg in messages)
     
     @pytest.mark.asyncio
@@ -155,7 +155,7 @@ class TestDataIngesterFinal70Plus:
         
         # Create test file
         with open(file_path, 'w') as f:
-            f.write('id,name\n100,Append1\n101,Append2\n')
+            f.write('id,name\n100,append1\n101,append2\n')
         
         format_config = {"csv_format": {"delimiter": ","}}
         
@@ -196,7 +196,7 @@ class TestDataIngesterFinal70Plus:
                 messages.append(message)
             
             # Should hit append mode message (lines 396-397)
-            assert any("Append mode: will insert new rows into existing main table" in msg for msg in messages)
+            assert any("append mode: will insert new rows into existing main table" in msg for msg in messages)
     
     @pytest.mark.asyncio
     async def test_ingest_cancellation_after_validation(self):

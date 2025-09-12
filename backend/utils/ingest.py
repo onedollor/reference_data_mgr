@@ -199,9 +199,9 @@ class DataIngester:
             yield "Determining load type based on existing data..."
             determined_load_type = self.db_manager.determine_load_type(connection, table_name, load_mode, override_load_type)
             if override_load_type:
-                yield f"Load type overridden by user: {'Full Load' if determined_load_type == 'F' else 'Append Load'} (code: {determined_load_type})"
+                yield f"Load type overridden by user: {'fullload' if determined_load_type == 'F' else 'append'} (code: {determined_load_type})"
             else:
-                yield f"Load type determined: {'Full Load' if determined_load_type == 'F' else 'Append Load'} (code: {determined_load_type})"
+                yield f"Load type determined: {'fullload' if determined_load_type == 'F' else 'append'} (code: {determined_load_type})"
 
             # Step 8: Check existing data for backup (BEFORE creating tables)
             existing_rows = 0
@@ -214,7 +214,7 @@ class DataIngester:
                     yield f"Found {existing_rows} existing rows that will be backed up"
             elif table_exists and load_mode == "append":
                 existing_rows = self.db_manager.get_row_count(connection, table_name)
-                yield f"Append mode: main table already has {existing_rows} rows (will preserve and append)"
+                yield f"append mode: main table already has {existing_rows} rows (will preserve and append)"
 
             # Check for cancellation before table operations
             if progress_key and prog.is_canceled(progress_key):
@@ -238,10 +238,10 @@ class DataIngester:
             # Main table handling - preserve existing table in both modes
             if load_mode == "full":
                 if not table_exists:
-                    yield "Full load mode: main table does not exist, creating new main table..."
+                    yield "fullload mode: main table does not exist, creating new main table..."
                     self.db_manager.create_table(connection, table_name, columns, add_metadata_columns=True)
                 else:
-                    yield "Full load mode: preserving existing main table structure"
+                    yield "fullload mode: preserving existing main table structure"
                     # Ensure metadata columns exist first
                     try:
                         meta_actions = self.db_manager.ensure_metadata_columns(connection, table_name)
@@ -264,17 +264,17 @@ class DataIngester:
                     except Exception as _e:
                         yield f"WARNING: Main table column sync failed: {_e}"
                     
-                    # Clear existing data for full load (but preserve table structure)
+                    # Clear existing data for fullload (but preserve table structure)
                     if existing_rows > 0:
-                        yield f"Full load mode: truncating {existing_rows} existing rows from main table..."
+                        yield f"fullload mode: truncating {existing_rows} existing rows from main table..."
                         self.db_manager.truncate_table(connection, table_name)
-                        yield "Main table data cleared for full load"
+                        yield "Main table data cleared for fullload"
             else:  # append
                 if not table_exists:
-                    yield "Append mode: main table does not exist yet, creating new main table..."
+                    yield "append mode: main table does not exist yet, creating new main table..."
                     self.db_manager.create_table(connection, table_name, columns, add_metadata_columns=True)
                 else:
-                    yield "Append mode: preserving existing main table schema"
+                    yield "append mode: preserving existing main table schema"
                     # Ensure metadata columns exist first
                     try:
                         meta_actions = self.db_manager.ensure_metadata_columns(connection, table_name)
@@ -390,11 +390,11 @@ class DataIngester:
                 yield "Cancellation requested - stopping after validation"
                 raise Exception("Ingestion canceled by user")
 
-            # Step 12: Prepare for data load (existing data backed up and main table cleared for full load)
+            # Step 12: Prepare for data load (existing data backed up and main table cleared for fullload)
             if load_mode == "full":
-                yield "Preparing for full load (existing data backed up, main table structure preserved)"
+                yield "Preparing for fullload (existing data backed up, main table structure preserved)"
             else:
-                yield "Append mode: will insert new rows into existing main table"
+                yield "append mode: will insert new rows into existing main table"
 
             # All columns are varchar - no numeric sanitation needed
 
@@ -737,7 +737,7 @@ class DataIngester:
         return inferred
     
     def _persist_inferred_schema(self, fmt_file_path: str, inferred_map: Dict[str, str]) -> None:
-        """Append inferred schema info into existing .fmt file under key inferred_schema."""
+        """append inferred schema info into existing .fmt file under key inferred_schema."""
         import json
         if not os.path.exists(fmt_file_path):
             return
@@ -834,7 +834,7 @@ class DataIngester:
                 batch_params = []
                 for _, row in slice_df.iterrows():
                     row_values = [prepare_value(row[c], c) for c in data_columns]
-                    # Append static ref_data_loadtime then ref_data_loadtype
+                    # append static ref_data_loadtime then ref_data_loadtype
                     row_values.append(static_load_timestamp if static_load_timestamp else datetime.utcnow())
                     row_values.append(load_type)
                     batch_params.extend(row_values)  # Flatten into single list
@@ -859,7 +859,7 @@ class DataIngester:
                         for col in data_columns:
                             value = prepare_value(row[col], col)
                             row_values.append(value)
-                        # Append static load timestamp then ref_data_loadtype
+                        # append static load timestamp then ref_data_loadtype
                         row_values.append(static_load_timestamp if static_load_timestamp else datetime.utcnow())
                         row_values.append(load_type)
                         cursor.execute(single_sql, row_values)

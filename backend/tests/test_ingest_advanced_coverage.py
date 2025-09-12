@@ -196,7 +196,7 @@ class TestDataIngesterAdvancedCoverage:
         
         # Create test file
         with open(file_path, 'w') as f:
-            f.write('id,name\n100,AppendData\n101,MoreAppend\n')
+            f.write('id,name\n100,appendData\n101,Moreappend\n')
         
         format_config = {"csv_format": {"delimiter": ","}}
         
@@ -223,7 +223,7 @@ class TestDataIngesterAdvancedCoverage:
                 messages.append(message)
             
             # Should handle append mode correctly
-            assert any("Append mode: main table already has 75 rows" in msg for msg in messages)
+            assert any("append mode: main table already has 75 rows" in msg for msg in messages)
     
     @pytest.mark.asyncio
     async def test_cancellation_scenarios_comprehensive(self):
