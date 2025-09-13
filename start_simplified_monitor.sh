@@ -62,9 +62,6 @@ setup_directories() {
     # Create necessary directories
     mkdir -p "$LOG_DIR"
     mkdir -p "$PID_DIR"
-    mkdir -p "$SCRIPT_DIR/data/reference_data/dropoff"
-    mkdir -p "$SCRIPT_DIR/data/reference_data/dropoff/processed"
-    mkdir -p "$SCRIPT_DIR/data/reference_data/dropoff/error"
     
     print_success "Directories created successfully"
 }
