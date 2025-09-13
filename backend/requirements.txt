@@ -6,6 +6,7 @@ pyodbc>=5.0.0
 PyYAML>=6.0
 chardet
 aiofiles
+reportlab>=4.0.0
 # Testing dependencies
 pytest
 pytest-cov

@@ -118,6 +118,7 @@ class ExcelProcessor:
                 'Mode:': 'processing_mode',
                 'Create Config Record:': 'is_reference_data',
                 'Table Name:': 'table_name',
+                'Target Schema:': 'target_schema',
 
                 # Confirmation section mappings
                 'I Confirm Processing:': 'confirmed',
@@ -276,6 +277,7 @@ class ExcelProcessor:
             'load_type': config['processing_mode'],
             'is_reference_data': config['is_reference_data'],
             'table_name': config.get('table_name', ''),
+            'target_schema': config.get('target_schema', 'ref'),
             'format_overrides': {
                 'delimiter': config['delimiter'],
                 'encoding': config['encoding'],

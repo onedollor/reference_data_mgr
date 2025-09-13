@@ -192,6 +192,31 @@ class DatabaseManager:
         result = cursor.fetchone()
         return result[0] > 0
 
+    def get_table_schema(self, connection: pyodbc.Connection, table_name: str) -> str:
+        """Get the schema for a table if it exists, returns None if table doesn't exist"""
+        cursor = connection.cursor()
+        cursor.execute("""
+            SELECT TABLE_SCHEMA
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_NAME = ?
+        """, table_name)
+        
+        result = cursor.fetchone()
+        return result[0] if result else None
+
+    def get_available_schemas(self, connection: pyodbc.Connection) -> List[str]:
+        """Get list of available schemas excluding restricted ones"""
+        cursor = connection.cursor()
+        cursor.execute("""
+            SELECT DISTINCT SCHEMA_NAME
+            FROM INFORMATION_SCHEMA.SCHEMATA
+            WHERE SCHEMA_NAME NOT IN ('information_schema', 'sys', 'bkp', 'backup', 'guest')
+            AND (SCHEMA_NAME NOT LIKE 'db_%' OR SCHEMA_NAME = 'dbo')
+            ORDER BY SCHEMA_NAME
+        """)
+        
+        return [row[0] for row in cursor.fetchall()]
+
     def get_table_columns(self, connection: pyodbc.Connection, table_name: str, schema: str = None) -> List[Dict[str, Any]]:
         """Get column information for a table"""
         if schema is None:

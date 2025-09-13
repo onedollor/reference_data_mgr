@@ -350,6 +350,52 @@ class ExcelFormGenerator:
         ws[f'C{row}'].value = f"Default: {default_table_name} (derived from filename)"
         row += 1
 
+        # Target Schema
+        ws[f'A{row}'].value = "Target Schema:"
+        ws[f'A{row}'].font = label_font
+        schema_cell = ws[f'B{row}']
+        
+        # Get available schemas and prioritize existing table's schema
+        try:
+            from .database import DatabaseManager
+            db_manager = DatabaseManager()
+            with db_manager.get_connection() as connection:
+                available_schemas = db_manager.get_available_schemas(connection)
+                existing_schema = db_manager.get_table_schema(connection, default_table_name)
+                
+                # If table exists in a specific schema, move that schema to first position
+                if existing_schema and existing_schema in available_schemas:
+                    available_schemas.remove(existing_schema)
+                    available_schemas.insert(0, existing_schema)
+                elif existing_schema and existing_schema not in available_schemas:
+                    # If existing schema is not in available list, add it as first option
+                    available_schemas.insert(0, existing_schema)
+                
+                # Set the first schema in the list as the default value
+                default_schema = available_schemas[0] if available_schemas else 'ref'
+                schema_cell.value = default_schema
+                
+                # Create dropdown with available schemas
+                schema_formula = ','.join(f'"{schema}"' for schema in available_schemas)
+                schema_validation = DataValidation(type="list", formula1=schema_formula, showDropDown=False)
+                ws.add_data_validation(schema_validation)
+                schema_validation.add(schema_cell)
+                
+        except Exception as e:
+            # Fallback if database connection fails
+            available_schemas = ['ref']
+            default_schema = 'ref'
+            schema_cell.value = default_schema
+            existing_schema = None
+            
+        schema_cell.border = border_thin
+        
+        if existing_schema:
+            ws[f'C{row}'].value = f"Default: {default_schema} (table exists in this schema)"
+        else:
+            ws[f'C{row}'].value = f"Default: {default_schema} (new table)"
+        row += 1
+
         return row
 
     def _add_confirmation_section(self, ws, row: int, warning_fill, warning_font, label_font, border_thin) -> int:
