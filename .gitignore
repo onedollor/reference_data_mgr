@@ -53,6 +53,7 @@ temp/
 *.pdf
 
 #pid files
+pid/
 *.pid
 *.seed
 
