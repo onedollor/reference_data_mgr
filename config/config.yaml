@@ -1,0 +1,44 @@
+# Application Configuration
+logging:
+  timezone: "America/Toronto"
+  
+database:
+  host: "localhost"
+  name: "test"
+  user: "tester"
+  password: "121@abc!"
+  odbc_driver: "ODBC Driver 17 for SQL Server"
+  pool_size: 5
+  max_retries: 3
+  retry_backoff: 0.5
+  
+schemas:
+  data_schema: "ref"
+  backup_schema: "bkp"
+  validation_sp_schema: "ref"
+  
+staff_database: "StaffDatabase"
+
+file_handling:
+  temp_location: "/home/lin/test_data/reference_data/temp"
+  archive_location: "/home/lin/test_data/reference_dataarchive"
+  format_location: "/home/lin/test_data/reference_data/format"
+  dropoff_path: "/home/lin/repo/reference_data_mgr/data/reference_data/dropoff"
+  max_upload_size: 20971520
+
+monitor:
+  interval: 15  # seconds - file monitoring check interval
+  stability_checks: 6  # consecutive checks without size change
+  log_file: "/home/lin/repo/reference_data_mgr/logs/simplified_file_monitor.log"
+
+ingest:
+  progress_interval: 5
+  type_inference: false
+  type_sample_rows: 5000
+  date_threshold: 0.8
+  batch_size: 500
+  slow_progress_demo: false
+  persist_schema: false
+
+debug:
+  enabled: false

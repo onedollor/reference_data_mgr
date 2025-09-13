@@ -1,15 +1,11 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
-pandas==2.1.3
-pyodbc==5.0.1
-python-dotenv==1.0.0
-pydantic==2.5.0
-aiofiles==23.2.1
-chardet==5.2.0
-sqlalchemy==2.0.23
-pytest==8.2.2
-pytest-cov==4.0.0
-pytest-asyncio==0.21.1
-PyPDF2==3.2.0
-reportlab>=4.0.3
+# Core Excel workflow dependencies
+fastapi
+openpyxl>=3.1.0
+pandas>=2.0.0
+pyodbc>=5.0.0
+PyYAML>=6.0
+chardet
+aiofiles
+# Testing dependencies
+pytest
+pytest-cov

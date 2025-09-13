@@ -22,38 +22,38 @@ import utils.progress as progress_utils
 
 class ReferenceDataAPI:
     """Unified API for reference data operations without HTTP dependency"""
-    
+
     def __init__(self, logger: Optional[Logger] = None):
         """Initialize the API with optional logger"""
         # Set up logging
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         self.logger = logging.getLogger(__name__)
-        
+
         # Create async logger if not provided
         if logger is None:
             logger = Logger()
         self.async_logger = logger
-        
+
         self.db_manager = DatabaseManager()
         self.data_ingester = DataIngester(self.db_manager, logger)
         self.csv_detector = CSVFormatDetector()
         self.file_handler = FileHandler()
         self.progress_utils = progress_utils
-        
+
     def detect_format(self, file_path: str) -> Dict[str, Any]:
         """Detect CSV format and return analysis"""
         try:
             self.logger.info(f"Detecting format for: {file_path}")
-            
+
             # Use the existing CSV detector
             detection_result = self.csv_detector.detect_format(file_path)
-            
+
             return {
                 "success": True,
                 "file_path": file_path,
                 "detected_format": detection_result
             }
-            
+
         except Exception as e:
             self.logger.error(f"Format detection failed for {file_path}: {str(e)}")
             return {
@@ -61,25 +61,25 @@ class ReferenceDataAPI:
                 "error": str(e),
                 "file_path": file_path
             }
-    
+
     def analyze_schema_match(self, file_path: str, headers: List[str]) -> Dict[str, Any]:
         """Analyze schema matching with existing tables"""
         try:
             # Get all existing tables
             tables = self.db_manager.get_all_tables()
-            
+
             # Find matching tables based on column schema
             matching_tables = []
             for table in tables:
                 table_columns = self.db_manager.get_table_columns(table["name"], table.get("schema", "ref"))
                 table_col_names = [col["name"].lower() for col in table_columns]
                 file_col_names = [h.lower() for h in headers]
-                
+
                 # Calculate match percentage
                 matches = len(set(table_col_names) & set(file_col_names))
                 total = len(set(table_col_names) | set(file_col_names))
                 match_percentage = matches / total if total > 0 else 0
-                
+
                 if match_percentage > 0.7:  # 70% match threshold
                     matching_tables.append({
                         "table_name": table["name"],
@@ -88,23 +88,23 @@ class ReferenceDataAPI:
                         "matching_columns": matches,
                         "total_columns": total
                     })
-            
+
             # Sort by match percentage
             matching_tables.sort(key=lambda x: x["match_percentage"], reverse=True)
-            
+
             return {
                 "success": True,
                 "matching_tables": matching_tables,
                 "file_headers": headers
             }
-            
+
         except Exception as e:
             self.logger.error(f"Schema analysis failed: {str(e)}")
             return {
                 "success": False,
                 "error": str(e)
             }
-    
+
     def extract_table_name_from_file(self, file_path: str) -> str:
         """Extract table name from file path using existing logic"""
         try:
@@ -121,10 +121,10 @@ class ReferenceDataAPI:
             table_name = re.sub(r'[^a-zA-Z0-9_]', '_', table_name)
             table_name = re.sub(r'_+', '_', table_name)
             return table_name.strip('_').lower()
-    
+
     async def process_file_async(
-        self, 
-        file_path: str, 
+        self,
+        file_path: str,
         load_type: str = "fullload",
         table_name: Optional[str] = None,
         target_schema: str = "ref",
@@ -135,17 +135,17 @@ class ReferenceDataAPI:
             # Extract table name if not provided
             if table_name is None:
                 table_name = self.extract_table_name_from_file(file_path)
-            
+
             self.logger.info(f"Processing file: {file_path}")
             self.logger.info(f"Table: {table_name}, Load type: {load_type}, Schema: {target_schema}")
-            
+
             # Detect CSV format first
             format_info = self.detect_format(file_path)
             delimiter = format_info["detected_format"].get("column_delimiter", ",")
-            
+
             # Create format file with detected CSV format
             fmt_file_path = f"{file_path}.fmt"
-            
+
             # Create format configuration based on detected format
             format_config = {
                 "file_info": {
@@ -169,12 +169,12 @@ class ReferenceDataAPI:
                     "strip_whitespace": True
                 }
             }
-            
+
             # Write format file
             import json
             with open(fmt_file_path, 'w', encoding='utf-8') as f:
                 json.dump(format_config, f, indent=2)
-            
+
             # Use the existing data ingester (it's an async generator)
             messages = []
             async for message in self.data_ingester.ingest_data(
@@ -188,13 +188,13 @@ class ReferenceDataAPI:
             ):
                 messages.append(message)
                 self.logger.info(f"Ingestion progress: {message}")
-            
+
             result = messages
-            
+
             # Clean up temporary format file
             if os.path.exists(fmt_file_path):
                 os.remove(fmt_file_path)
-            
+
             return {
                 "success": True,
                 "result": result,
@@ -202,7 +202,7 @@ class ReferenceDataAPI:
                 "load_type": load_type,
                 "file_path": file_path
             }
-            
+
         except Exception as e:
             self.logger.error(f"File processing failed for {file_path}: {str(e)}")
             return {
@@ -211,10 +211,10 @@ class ReferenceDataAPI:
                 "file_path": file_path,
                 "table_name": table_name
             }
-    
+
     def process_file_sync(
-        self, 
-        file_path: str, 
+        self,
+        file_path: str,
         load_type: str = "fullload",
         table_name: Optional[str] = None,
         target_schema: str = "ref",
@@ -228,7 +228,7 @@ class ReferenceDataAPI:
                 # If loop is running, we need to run in a thread or use different approach
                 import concurrent.futures
                 import threading
-                
+
                 def run_async():
                     new_loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(new_loop)
@@ -240,7 +240,7 @@ class ReferenceDataAPI:
                         )
                     finally:
                         new_loop.close()
-                
+
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(run_async)
                     return future.result()
@@ -263,14 +263,14 @@ class ReferenceDataAPI:
                 )
             finally:
                 loop.close()
-    
+
     def get_table_info(self, table_name: str, schema: str = "ref") -> Dict[str, Any]:
         """Get information about a specific table"""
         try:
             if self.db_manager.table_exists(table_name, schema):
                 columns = self.db_manager.get_table_columns(table_name, schema)
                 row_count = self.db_manager.get_table_row_count(table_name, schema)
-                
+
                 return {
                     "success": True,
                     "table_name": table_name,
@@ -286,7 +286,7 @@ class ReferenceDataAPI:
                     "schema": schema,
                     "exists": False
                 }
-                
+
         except Exception as e:
             self.logger.error(f"Failed to get table info for {schema}.{table_name}: {str(e)}")
             return {
@@ -295,7 +295,7 @@ class ReferenceDataAPI:
                 "table_name": table_name,
                 "schema": schema
             }
-    
+
     def get_all_tables(self) -> Dict[str, Any]:
         """Get list of all tables"""
         try:
@@ -310,7 +310,7 @@ class ReferenceDataAPI:
                 "success": False,
                 "error": str(e)
             }
-    
+
     def get_progress(self, progress_key: str) -> Dict[str, Any]:
         """Get progress information for a specific key"""
         try:
@@ -324,7 +324,7 @@ class ReferenceDataAPI:
                 "success": False,
                 "error": str(e)
             }
-    
+
     def cancel_operation(self, progress_key: str) -> Dict[str, Any]:
         """Cancel an ongoing operation"""
         try:
@@ -338,7 +338,7 @@ class ReferenceDataAPI:
                 "success": False,
                 "error": str(e)
             }
-    
+
     def get_system_logs(self, limit: int = 100) -> Dict[str, Any]:
         """Get system logs"""
         try:
@@ -352,7 +352,7 @@ class ReferenceDataAPI:
                 "success": False,
                 "error": str(e)
             }
-    
+
     def insert_reference_data_cfg_record(self, table_name: str) -> Dict[str, Any]:
         """Insert a record into Reference_Data_Cfg table"""
         try:
@@ -361,7 +361,7 @@ class ReferenceDataAPI:
             try:
                 self.db_manager.insert_reference_data_cfg_record(connection, table_name)
                 connection.commit()
-                
+
                 self.logger.info(f"Reference data config record inserted for table: {table_name}")
                 return {
                     "success": True,
@@ -369,7 +369,7 @@ class ReferenceDataAPI:
                 }
             finally:
                 connection.close()
-                
+
         except Exception as e:
             self.logger.error(f"Failed to insert reference data config for {table_name}: {str(e)}")
             return {
@@ -382,7 +382,7 @@ class ReferenceDataAPI:
         try:
             # Test database connection
             db_healthy = self.db_manager.test_connection()
-            
+
             return {
                 "success": True,
                 "status": "healthy" if db_healthy else "unhealthy",
@@ -423,7 +423,7 @@ if __name__ == "__main__":
     # Test the API
     api = ReferenceDataAPI()
     print("Backend API initialized successfully")
-    
+
     # Test health check
     health = api.health_check()
     print(f"Health check: {health}")

@@ -14,11 +14,9 @@ from utils.database import DatabaseManager
 from utils.file_handler import FileHandler
 from utils.logger import Logger
 from utils import progress as prog
-
-
 class DataIngester:
     """Handles CSV data ingestion into SQL Server database"""
-    
+
     def __init__(self, db_manager: DatabaseManager, logger: Logger):
         self.db_manager = db_manager
         self.logger = logger
@@ -26,24 +24,20 @@ class DataIngester:
         # Batch / progress parameters (only multi-row batching retained)
         # Fixed batch size (multi-row VALUES per insert) explicitly set to 990
         self.batch_size = 990
-        try:
-            self.progress_batch_interval = int(os.getenv("INGEST_PROGRESS_INTERVAL", "5"))
-        except ValueError:
-            self.progress_batch_interval = 5
+        from .config_loader import config
+        ingest_config = config.get_ingest_config()
+        self.progress_batch_interval = ingest_config['progress_interval']
         # Type inference
-        self.enable_type_inference = os.getenv("INGEST_TYPE_INFERENCE", "0") in ("1", "true", "True")
-        try:
-            self.type_sample_rows = int(os.getenv("INGEST_TYPE_SAMPLE_ROWS", "5000"))
-        except ValueError:
-            self.type_sample_rows = 5000
-        self.date_parse_threshold = float(os.getenv("INGEST_DATE_THRESHOLD", "0.8"))  # 80% rows
+        self.enable_type_inference = ingest_config['type_inference']
+        self.type_sample_rows = ingest_config['type_sample_rows']
+        self.date_parse_threshold = ingest_config['date_threshold']
         # Legacy bulk/stream settings removed.
-    
+
     async def ingest_data(
-        self, 
-        file_path: str, 
-        fmt_file_path: str, 
-        load_mode: str, 
+        self,
+        file_path: str,
+        fmt_file_path: str,
+        load_mode: str,
         filename: str,
         override_load_type: str = None,
         config_reference_data: bool = False,
@@ -73,14 +67,14 @@ class DataIngester:
             yield "Connecting to database..."
             t_connect_start = time.perf_counter()
             connection = self.db_manager.get_connection()
-            
+
             # Use target schema or default to configured data schema
             if target_schema:
                 # Temporarily override the data_schema for this ingestion
                 original_data_schema = self.db_manager.data_schema
                 self.db_manager.data_schema = target_schema
                 yield f"Using target schema: {target_schema}"
-            
+
             self.db_manager.ensure_schemas_exist(connection)
             yield f"Database connection established (took {(time.perf_counter()-t_connect_start):.2f}s)"
 
@@ -111,18 +105,16 @@ class DataIngester:
             if progress_key and prog.is_canceled(progress_key):
                 yield "Cancellation requested - stopping after format configuration"
                 raise Exception("Ingestion canceled by user")
-
-
             # Step 4: Read and validate CSV file (always full read)
             yield "Reading CSV file..."
             t_read = time.perf_counter()
             df = await self._read_csv_file(file_path, csv_format, progress_key)
-            
+
             # Trailer handling is now done inside _read_csv_file
             has_trailer = csv_format.get('has_trailer', False)
             if has_trailer:
                 yield "Trailer detected: last row removed during CSV read"
-            
+
             total_rows = len(df)
             prog.update_progress(progress_key, total=total_rows, inserted=0, stage='read_csv')
             yield f"CSV file loaded: {total_rows} rows (read in {(time.perf_counter()-t_read):.2f}s, {(total_rows/(time.perf_counter()-t_read) if total_rows else 0):.0f} rows/s)"
@@ -143,12 +135,12 @@ class DataIngester:
             valid_headers = [(orig, san) for orig, san in zip(original_headers, sanitized_headers) if san]
             if not valid_headers:
                 yield "ERROR! No valid columns found after header sanitization"
-                
+
                 # Auto-cancel on no valid headers
                 if progress_key:
                     prog.request_cancel(progress_key)
                     yield "Upload process automatically canceled due to invalid headers"
-                
+
                 return
             yield f"Headers processed: {len(valid_headers)} valid columns ({(time.perf_counter()-t_headers):.2f}s)"
 
@@ -176,7 +168,7 @@ class DataIngester:
                     yield f"WARNING: Failed to persist inferred schema: {_e}"
                 # All columns are varchar only - no type validation needed
                 yield "All columns configured as varchar with appropriate lengths"
-                
+
                 # Check for cancellation after type inference
                 if progress_key and prog.is_canceled(progress_key):
                     yield "Cancellation requested - stopping after type inference"
@@ -228,8 +220,6 @@ class DataIngester:
             stage_exists = self.db_manager.table_exists(connection, stage_table_name)
             if table_exists or stage_exists:
                 yield "Existing tables found, validating schema..."
-
-
             # Check for cancellation before main table operations
             if progress_key and prog.is_canceled(progress_key):
                 yield "Cancellation requested - stopping before main table operations"
@@ -249,7 +239,7 @@ class DataIngester:
                             yield f"Added missing metadata columns to main table: {[col['column'] for col in meta_actions['added']]}"
                     except Exception as e:
                         yield f"WARNING: Failed to add metadata columns to main table: {e}"
-                    
+
                     # Sync main table columns to add missing columns from file (never modify existing types)
                     try:
                         column_sync_actions = self.db_manager.sync_main_table_columns(connection, table_name, columns)
@@ -263,7 +253,7 @@ class DataIngester:
                             yield "Main table columns are compatible with input file"
                     except Exception as _e:
                         yield f"WARNING: Main table column sync failed: {_e}"
-                    
+
                     # Clear existing data for fullload (but preserve table structure)
                     if existing_rows > 0:
                         yield f"fullload mode: truncating {existing_rows} existing rows from main table..."
@@ -282,7 +272,7 @@ class DataIngester:
                             yield f"Added missing metadata columns to main table: {[col['column'] for col in meta_actions['added']]}"
                     except Exception as e:
                         yield f"WARNING: Failed to add metadata columns to main table: {e}"
-                    
+
                     # Sync main table columns to add missing columns from file (never modify existing types)
                     try:
                         column_sync_actions = self.db_manager.sync_main_table_columns(connection, table_name, columns)
@@ -305,7 +295,7 @@ class DataIngester:
                 yield "Existing stage table dropped"
             else:
                 yield "Creating new stage table to match input file columns..."
-            
+
             # Always create fresh stage table with exact input file structure
             self.db_manager.create_table(connection, stage_table_name, columns, add_metadata_columns=True)
             column_names = [col['name'] for col in columns]
@@ -321,17 +311,17 @@ class DataIngester:
             t_process = time.perf_counter()
             column_mapping = {orig: san for orig, san in valid_headers}
             df_processed = df[list(column_mapping.keys())].rename(columns=column_mapping)
-            
+
             for col in df_processed.columns:
                 df_processed[col] = df_processed[col].astype(str).replace({'nan':'','None':''})
             # All columns are varchar - no numeric validation needed
             yield f"Data processing completed ({(time.perf_counter()-t_process):.2f}s)"
-            
+
             # Check for cancellation after data processing
             if progress_key and prog.is_canceled(progress_key):
                 yield "Cancellation requested - stopping after data processing"
                 raise Exception("Ingestion canceled by user")
-            
+
             yield "Loading data to stage table..."
             t_load = time.perf_counter()
             # Update progress to show we're starting the insert phase
@@ -374,12 +364,12 @@ class DataIngester:
                 for issue in issue_list:
                     yield f"  - Issue {issue.get('issue_id')}: {issue.get('issue_detail')}"
                 yield "Data remains in stage table for review"
-                
+
                 # Auto-cancel on validation failure
                 if progress_key:
                     prog.request_cancel(progress_key)
                     yield "Upload process automatically canceled due to validation errors"
-                
+
                 return
 
             yield f"Data validation passed ({(time.perf_counter()-t_validate):.2f}s)"
@@ -407,23 +397,23 @@ class DataIngester:
             yield "Moving data from stage to main table..."
             t_move = time.perf_counter()
             cursor = connection.cursor()
-            
+
             # Get column lists from both tables to ensure proper alignment
             main_table_columns = self.db_manager.get_table_columns(connection, table_name, self.db_manager.data_schema)
             stage_table_columns = self.db_manager.get_table_columns(connection, stage_table_name, self.db_manager.data_schema)
-            
+
             # Create dictionaries for easy lookup
             main_cols = {col['name'].lower(): col for col in main_table_columns}
             stage_cols = {col['name'].lower(): col for col in stage_table_columns}
-            
+
             # Build column lists ensuring both tables have the columns
             insert_columns = []  # Columns for main table INSERT
             select_columns = []  # Columns for stage table SELECT
-            
+
             for stage_col in stage_table_columns:
                 col_name = stage_col['name']
                 col_name_lower = col_name.lower()
-                
+
                 if col_name_lower in main_cols:
                     # Column exists in both tables
                     insert_columns.append(f"[{col_name}]")
@@ -431,29 +421,29 @@ class DataIngester:
                 else:
                     # Stage column doesn't exist in main table - skip it
                     yield f"WARNING: Skipping stage column [{col_name}] - not found in main table"
-            
+
             # Check for main table columns missing from stage (should have default values)
             for main_col in main_table_columns:
                 col_name = main_col['name']
                 col_name_lower = col_name.lower()
-                
+
                 if col_name_lower not in stage_cols:
                     # Main table has column that stage doesn't have
                     # This is OK if the column has a default value or allows NULLs
                     yield f"INFO: Main table column [{col_name}] not in stage - will use default/NULL"
-            
+
             if not insert_columns:
                 raise Exception("No compatible columns found between stage and main tables")
-            
+
             # Build explicit INSERT statement with column lists
             insert_column_list = ", ".join(insert_columns)
             select_column_list = ", ".join(select_columns)
-            
+
             insert_sql = (
                 f"INSERT INTO [{self.db_manager.data_schema}].[{table_name}] ({insert_column_list}) "
                 f"SELECT {select_column_list} FROM [{self.db_manager.data_schema}].[{stage_table_name}]"
             )
-            
+
             yield f"Transferring {len(insert_columns)} matching columns from stage to main table"
             cursor.execute(insert_sql)
             final_rows = cursor.rowcount
@@ -466,28 +456,28 @@ class DataIngester:
             # Create backup after successful data changes to main table
             if final_rows > 0:
                 yield f"Data changes detected in main table ({final_rows} rows affected), creating backup..."
-                
+
                 # First, create/validate backup table with schema compatibility check
                 backup_exists = self.db_manager.table_exists(connection, table_base_name + '_backup')
                 if backup_exists:
                     yield "Backup table exists, validating and adjusting schema if needed..."
                 else:
                     yield "Creating new backup table..."
-                
+
                 # Get current main table columns for backup schema validation (exclude metadata columns)
                 main_table_columns = self.db_manager.get_table_columns(connection, table_name, self.db_manager.data_schema)
                 # Filter out metadata columns since create_backup_table will add them
                 data_columns = [col for col in main_table_columns if col['name'].lower() not in ['ref_data_loadtime', 'ref_data_loadtype']]
                 self.db_manager.create_backup_table(connection, table_name, data_columns)
                 yield "Backup table schema validated and synchronized with main table"
-                
+
                 # Ensure backup table has proper metadata columns
                 backup_table_name = f"{table_base_name}_backup"
                 if self.db_manager.table_exists(connection, backup_table_name, self.db_manager.backup_schema):
                     backup_meta_actions = self.db_manager.ensure_backup_table_metadata_columns(connection, backup_table_name)
                     if backup_meta_actions['added']:
                         yield f"Added missing metadata columns to backup table: {[col['column'] for col in backup_meta_actions['added']]}"
-                
+
                 # Backup the current main table data AFTER successful data transfer
                 backup_rows = self.db_manager.backup_existing_data(connection, table_name, table_base_name)
                 yield f"Current main table state backed up: {backup_rows} rows with version tracking"
@@ -512,7 +502,7 @@ class DataIngester:
                 "data_ingestion",
                 f"Successfully ingested {final_rows} rows from {filename} to table {table_name}"
             )
-            
+
             # Insert/update record in Reference_Data_Cfg table and call post-load procedure (if configured)
             if config_reference_data:
                 try:
@@ -542,12 +532,12 @@ class DataIngester:
             traceback_info = traceback.format_exc()
             yield f"ERROR! {error_msg}"
             yield f"ERROR! Traceback: {traceback_info}"
-            
+
             # Auto-cancel on any error to stop the upload process
             if progress_key:
                 prog.request_cancel(progress_key)
                 yield "Upload process automatically canceled due to error"
-            
+
             await self.logger.log_error(
                 "data_ingestion",
                 error_msg,
@@ -561,7 +551,7 @@ class DataIngester:
                 self.db_manager.data_schema = original_data_schema
             if connection:
                 connection.close()
-    
+
     async def _read_csv_file(self, file_path: str, csv_format: Dict[str, Any], progress_key: str = None) -> pd.DataFrame:
         """Read CSV file with specified format parameters"""
         try:
@@ -569,10 +559,10 @@ class DataIngester:
             delimiter = csv_format.get("column_delimiter", ",")
             text_qualifier = csv_format.get("text_qualifier", '"')
             skip_lines = csv_format.get("skip_lines", 0)
-            
+
             # Handle row delimiter (pandas uses lineterminator)
             row_delimiter = csv_format.get("row_delimiter", "\n")
-            
+
             # Pandas only supports single-character line terminators
             # Map complex delimiters to standard ones
             if len(row_delimiter) > 1 or row_delimiter in ['|""\\r\\n', '\\r\\n', '\\n', '\\r']:
@@ -584,7 +574,7 @@ class DataIngester:
                     row_delimiter = "\r"
                 else:
                     row_delimiter = "\n"  # Safe fallback
-            
+
             # Read CSV with pandas
             # For complex row delimiters, let pandas auto-detect line endings
             pandas_kwargs = {
@@ -596,11 +586,11 @@ class DataIngester:
                 'na_values': [],  # Don't convert anything to NaN
                 'encoding': 'utf-8'
             }
-            
+
             # Only set lineterminator for simple single-character delimiters
             if len(row_delimiter) == 1 and row_delimiter in ['\n', '\r']:
                 pandas_kwargs['lineterminator'] = row_delimiter
-            
+
             try:
                 df = pd.read_csv(file_path, **pandas_kwargs)
             except Exception as e:
@@ -611,7 +601,7 @@ class DataIngester:
                     df = pd.read_csv(file_path, **pandas_kwargs)
                 else:
                     raise
-            
+
             # Handle trailer removal immediately after successful CSV read
             has_trailer = csv_format.get('has_trailer', False)
             if has_trailer and len(df) > 0:
@@ -621,12 +611,12 @@ class DataIngester:
                     "trailer_removal",
                     f"Trailer removed: DataFrame size reduced from {original_size} to {len(df)} rows"
                 )
-            
+
             await self.logger.log_info(
                 "csv_processing",
                 f"Final DataFrame size after all CSV processing: {len(df)} rows, has_trailer: {has_trailer}"
             )
-            
+
             # Log first and last rows for verification
             if len(df) > 0:
                 first_row = df.iloc[0].to_dict()
@@ -634,7 +624,7 @@ class DataIngester:
                     "csv_data_sample",
                     f"First row after processing: {first_row}"
                 )
-                
+
                 if len(df) > 1:
                     last_row = df.iloc[-1].to_dict()
                     await self.logger.log_info(
@@ -646,7 +636,7 @@ class DataIngester:
                         "csv_data_sample",
                         "Only one row in DataFrame after processing"
                     )
-            
+
             return df
         except Exception as e:
             # Auto-cancel on CSV reading errors
@@ -656,36 +646,36 @@ class DataIngester:
                     "auto_cancel",
                     f"Upload process automatically canceled due to CSV reading error: {str(e)}"
                 )
-            
+
             raise Exception(f"Failed to read CSV file {file_path}: {str(e)}")
-    
+
     def _sanitize_headers(self, headers: List[str]) -> List[str]:
         """Sanitize column headers to be valid SQL identifiers"""
         sanitized = []
-        
+
         for header in headers:
             if not header or header.strip() == '':
                 sanitized.append('')  # Will be filtered out later
                 continue
-            
+
             # Remove extra whitespace
             clean_header = header.strip()
-            
+
             # Replace invalid characters with underscore
             clean_header = re.sub(r'[^a-zA-Z0-9_]', '_', clean_header)
-            
+
             # Ensure it starts with letter or underscore
             if clean_header and not (clean_header[0].isalpha() or clean_header[0] == '_'):
                 clean_header = f"col_{clean_header}"
-            
+
             # Limit length (SQL Server identifier limit is 128 characters)
             if len(clean_header) > 120:
                 clean_header = clean_header[:120]
-            
+
             sanitized.append(clean_header)
-        
+
         return sanitized
-    
+
     def _deduplicate_headers(self, headers: List[str]) -> List[str]:
         """Ensure unique sanitized header names by appending incremental suffixes."""
         seen = {}
@@ -707,7 +697,7 @@ class DataIngester:
                 seen[new_name] = 0
                 result.append(new_name)
         return result
-    
+
     def _infer_types(self, sample_df: pd.DataFrame, columns: List[str]) -> Dict[str, str]:
         """Determine varchar lengths from sample dataframe (all columns as varchar only)."""
         inferred = {}
@@ -717,12 +707,12 @@ class DataIngester:
             if series.empty:
                 inferred[col] = 'varchar(1024)'
                 continue
-            
+
             # Only detect string length - no type inference
             # Sample more rows for better length detection accuracy
             sample_size = min(len(series), 1000)  # Sample up to 1000 rows
             max_len = int(series.head(sample_size).map(len).max())
-            
+
             # Conservative varchar sizing based on detected max length
             if max_len <= 500:
                 size = 1024
@@ -732,10 +722,10 @@ class DataIngester:
                 size = 8000
             else:
                 size = 'MAX'  # Use varchar(MAX) for very long text
-            
+
             inferred[col] = f'varchar({size})' if size != 'MAX' else 'varchar(MAX)'
         return inferred
-    
+
     def _persist_inferred_schema(self, fmt_file_path: str, inferred_map: Dict[str, str]) -> None:
         """append inferred schema info into existing .fmt file under key inferred_schema."""
         import json
@@ -746,12 +736,12 @@ class DataIngester:
         data['inferred_schema'] = inferred_map
         with open(fmt_file_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2)
-    
+
     async def _load_dataframe_to_table(
-        self, 
-        connection, 
-        df: pd.DataFrame, 
-        table_name: str, 
+        self,
+        connection,
+        df: pd.DataFrame,
+        table_name: str,
         schema: str,
         total_rows: int,
         progress_key: str | None = None,
@@ -780,18 +770,15 @@ class DataIngester:
             insert_columns = data_columns + ['ref_data_loadtime', 'ref_data_loadtype']
             column_list = ', '.join([f'[{col}]' for col in insert_columns])
             # Trailer removal is now handled before this function is called
-            
+
             # Batch sizing
             # SQL Server supports maximum 1000 row value expressions per VALUES clause.
             # We intentionally cap at 990 to keep headroom and avoid edge-case failures if additional
             # rows (e.g., metadata) were ever appended in future logic.
-            try:
-                effective_batch = int(os.getenv("INGEST_BATCH_SIZE", "500"))
-                # Cap at 990 for SQL Server safety
-                if effective_batch > 990:
-                    effective_batch = 990
-            except ValueError:
-                effective_batch = 500
+            effective_batch = ingest_config['batch_size']
+            # Cap at 990 for SQL Server safety
+            if effective_batch > 990:
+                effective_batch = 990
             total = len(df)
             start_time = time.perf_counter()
             await self.logger.log_info(
@@ -822,14 +809,14 @@ class DataIngester:
                     break
                 slice_df = df.iloc[inserted: inserted + effective_batch]
                 batch_size = len(slice_df)
-                
+
                 # Use parameterized queries with multi-row VALUES to prevent SQL injection
                 # Create placeholders for all rows in this batch: (?,?,...), (?,?,...), (?,?,...)...
                 # Include placeholders for data columns + ref_data_loadtype (ref_data_loadtime uses DEFAULT)
                 single_row_placeholders = '(' + ', '.join(['?' for _ in insert_columns]) + ')'
                 all_rows_placeholders = ', '.join([single_row_placeholders for _ in range(batch_size)])
                 sql = f"INSERT INTO [{schema}].[{table_name}] ({column_list}) VALUES {all_rows_placeholders}"
-                
+
                 # Flatten all row values into a single parameter list
                 batch_params = []
                 for _, row in slice_df.iterrows():
@@ -838,17 +825,17 @@ class DataIngester:
                     row_values.append(static_load_timestamp if static_load_timestamp else datetime.utcnow())
                     row_values.append(load_type)
                     batch_params.extend(row_values)  # Flatten into single list
-                
+
                 # Debug: Check parameter count before execution
                 expected_params = batch_size * len(insert_columns)
                 actual_params = len(batch_params)
                 placeholder_count = sql.count('?')
-                
+
                 if expected_params != actual_params or expected_params != placeholder_count:
                     error_msg = f"Parameter mismatch: expected={expected_params}, actual={actual_params}, placeholders={placeholder_count}, batch_size={batch_size}, columns={len(insert_columns)}"
                     await self.logger.log_error("parameter_mismatch", error_msg)
                     raise Exception(error_msg)
-                
+
                 # Temporarily use individual INSERT statements to avoid SQL Server issues
                 single_sql = f"INSERT INTO [{schema}].[{table_name}] ({column_list}) VALUES ({', '.join(['?' for _ in insert_columns])})"
 
@@ -863,7 +850,7 @@ class DataIngester:
                         row_values.append(static_load_timestamp if static_load_timestamp else datetime.utcnow())
                         row_values.append(load_type)
                         cursor.execute(single_sql, row_values)
-                            
+
                     except Exception as e:
                         # Log detailed error information for debugging
                         error_details = f"Error at row {row_idx}: {str(e)}\n"
@@ -871,7 +858,7 @@ class DataIngester:
                         error_details += f"Raw row data: {dict(row)}"
                         await self.logger.log_error("insert_row_error", error_details)
                         raise e
-                    
+
                 connection.commit()  # Commit after each batch of rows
                 connection.autocommit = True
 
@@ -882,15 +869,15 @@ class DataIngester:
                     # Update progress every batch for real-time feedback
                     elapsed = time.perf_counter() - start_time
                     rate = inserted / elapsed if elapsed > 0 else 0
-                    
+
                 # CRITICAL: Yield control to event loop to allow cancel requests
                 import asyncio
                 await asyncio.sleep(0)  # Yield control to FastAPI event loop
-                
+
                 # Add small delay for demo purposes (remove in production)
-                if os.getenv("DEMO_SLOW_PROGRESS", "0") == "1":
+                if ingest_config['slow_progress_demo']:
                     await asyncio.sleep(0.5)  # Half second delay per batch for demonstration
-                    
+
                 # Log progress less frequently to avoid spam
                 if batch_count % max(1, self.progress_batch_interval) == 0:
                     elapsed = time.perf_counter() - start_time
@@ -916,7 +903,7 @@ class DataIngester:
                 connection.rollback()
             except Exception:
                 pass
-            
+
             # Auto-cancel on loading errors
             if progress_key:
                 prog.request_cancel(progress_key)
@@ -924,7 +911,7 @@ class DataIngester:
                     "auto_cancel",
                     f"Upload process automatically canceled due to loading error: {str(e)}"
                 )
-            
+
             raise Exception(f"Failed to load data to table {table_name}: {str(e)}")
-    
+
     # _insert_chunk removed: streaming mode deprecated.

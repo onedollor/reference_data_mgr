@@ -10,61 +10,55 @@ from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 import threading
 import time
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
-
-
+from .config_loader import config
 class DatabaseManager:
     """Handles all database operations for the Reference Data Auto Ingest System"""
-    
+
     def __init__(self):
         self.connection_string = self._build_connection_string()
-        self.data_schema = os.getenv("data_schema", "ref")
-        self.backup_schema = os.getenv("backup_schema", "bkp")
-        self.validation_sp_schema = os.getenv("validation_sp_schema", "ref")
-        
+        db_config = config.get_database_config()
+        self.data_schema = config.get('data_schema', 'ref', 'schemas')
+        self.backup_schema = config.get('backup_schema', 'bkp', 'schemas')
+        self.validation_sp_schema = config.get('validation_sp_schema', 'ref', 'schemas')
+
         # Store connection parameters for SQLAlchemy
-        self.server = os.getenv("db_host", "localhost")
-        self.database = os.getenv("db_name", "test")
-        self.staff_database = os.getenv("staff_database", "StaffDatabase")
-        self.username = os.getenv("db_user")
-        self.password = os.getenv("db_password")
-        
+        self.server = db_config['host']
+        self.database = db_config['name']
+        self.staff_database = config.get('staff_database', 'StaffDatabase')
+        self.username = db_config['user']
+        self.password = db_config['password']
+
         # Validate required database credentials
         if not self.username:
             raise ValueError("Database username (db_user) environment variable is required")
         if not self.password:
             raise ValueError("Database password (db_password) environment variable is required")
-        
+
         # Dynamic stored procedure name based on database name
         self.postload_sp_name = f"usp_reference_data_{self.database}"
 
         # Simple connection pool
-        try:
-            self.pool_size = int(os.getenv("DB_POOL_SIZE", "5"))
-        except ValueError:
-            self.pool_size = 5
+        self.pool_size = db_config['pool_size']
         self._pool: List[pyodbc.Connection] = []
         self._pool_lock = threading.Lock()
         self._in_use = 0
-        self.max_retries = int(os.getenv("DB_MAX_RETRIES", "3"))
-        self.retry_backoff = float(os.getenv("DB_RETRY_BACKOFF", "0.5"))
-    
+        self.max_retries = db_config['max_retries']
+        self.retry_backoff = db_config['retry_backoff']
+
     def _build_connection_string(self) -> str:
-        """Build SQL Server connection string from environment variables"""
-        host = os.getenv("db_host", "localhost")
-        database = os.getenv("db_name", "test")
-        username = os.getenv("db_user")
-        password = os.getenv("db_password")
-        
+        """Build SQL Server connection string from configuration"""
+        db_config = config.get_database_config()
+        host = db_config['host']
+        database = db_config['name']
+        username = db_config['user']
+        password = db_config['password']
+
         # Validate required credentials
         if not username:
-            raise ValueError("Database username (db_user) environment variable is required")
+            raise ValueError("Database username (db_user) configuration is required")
         if not password:
-            raise ValueError("Database password (db_password) environment variable is required")
-        driver = os.getenv("db_odbc_driver", "ODBC Driver 17 for SQL Server")
+            raise ValueError("Database password (db_password) configuration is required")
+        driver = db_config['odbc_driver']
 
         # Use SQL Server authentication
         # Enclose driver name in braces
@@ -73,7 +67,7 @@ class DatabaseManager:
             f"DRIVER={driver_fmt};SERVER={host};DATABASE={database};UID={username};PWD={password};TrustServerCertificate=yes;Encrypt=yes;"
         )
         return connection_string
-    
+
     def get_connection(self) -> pyodbc.Connection:
         """Get a database connection with auto-commit enabled"""
         try:
@@ -138,7 +132,7 @@ class DatabaseManager:
                     conn.close()
                 except:
                     pass
-    
+
     def test_connection(self) -> Dict[str, Any]:
         """Test database connectivity"""
         try:
@@ -146,7 +140,7 @@ class DatabaseManager:
                 cursor = conn.cursor()
                 cursor.execute("SELECT @@VERSION, GETDATE()")
                 result = cursor.fetchone()
-                
+
                 return {
                     "status": "success",
                     "server_version": result[0].split('\n')[0] if result else "Unknown",
@@ -163,13 +157,13 @@ class DatabaseManager:
                 "error": str(e),
                 "traceback": traceback.format_exc()
             }
-    
+
     def ensure_schemas_exist(self, connection: pyodbc.Connection) -> None:
         """Ensure required schemas exist in the database"""
         cursor = connection.cursor()
-        
+
         schemas = [self.data_schema, self.backup_schema, self.validation_sp_schema]
-        
+
         for schema in set(schemas):  # Remove duplicates
             try:
                 # Use parameterized query to prevent SQL injection
@@ -182,30 +176,30 @@ class DatabaseManager:
                 """, schema, schema)
             except Exception as e:
                 raise Exception(f"Failed to create schema {schema}: {str(e)}")
-    
+
     def table_exists(self, connection: pyodbc.Connection, table_name: str, schema: str = None) -> bool:
         """Check if a table exists"""
         if schema is None:
             schema = self.data_schema
-            
+
         cursor = connection.cursor()
         cursor.execute("""
-            SELECT COUNT(*) 
-            FROM INFORMATION_SCHEMA.TABLES 
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.TABLES
             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
         """, schema, table_name)
-        
+
         result = cursor.fetchone()
         return result[0] > 0
-    
+
     def get_table_columns(self, connection: pyodbc.Connection, table_name: str, schema: str = None) -> List[Dict[str, Any]]:
         """Get column information for a table"""
         if schema is None:
             schema = self.data_schema
-            
+
         cursor = connection.cursor()
         cursor.execute("""
-            SELECT 
+            SELECT
                 COLUMN_NAME,
                 DATA_TYPE,
                 CHARACTER_MAXIMUM_LENGTH,
@@ -218,7 +212,7 @@ class DatabaseManager:
             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
             ORDER BY ORDINAL_POSITION
         """, schema, table_name)
-        
+
         columns = []
         for row in cursor.fetchall():
             columns.append({
@@ -231,57 +225,57 @@ class DatabaseManager:
                 'default': row.COLUMN_DEFAULT,
                 'position': row.ORDINAL_POSITION
             })
-        
+
         return columns
-    
-    def create_table(self, connection: pyodbc.Connection, table_name: str, columns: List[Dict[str, str]], 
+
+    def create_table(self, connection: pyodbc.Connection, table_name: str, columns: List[Dict[str, str]],
                     schema: str = None, add_metadata_columns: bool = True) -> None:
         """Create a table with the specified columns"""
         if schema is None:
             schema = self.data_schema
-            
+
         cursor = connection.cursor()
-        
+
         # Drop table if it exists - use dynamic SQL with proper quoting
         drop_sql = "DROP TABLE IF EXISTS [" + schema + "].[" + table_name + "]"
         cursor.execute(drop_sql)
-        
+
         # Build column definitions
         column_defs = []
         for col in columns:
             col_def = f"[{col['name']}] {col['data_type']}"
             column_defs.append(col_def)
-        
+
         # Add metadata columns if requested
         if add_metadata_columns:
             column_defs.append("[ref_data_loadtime] datetime DEFAULT GETDATE()")
             column_defs.append("[ref_data_loadtype] varchar(255)")
-        
+
         # Create the table
         create_sql = f"""
             CREATE TABLE [{schema}].[{table_name}] (
                 {', '.join(column_defs)}
             )
         """
-        
+
         cursor.execute(create_sql)
-    
+
     def drop_table_if_exists(self, connection: pyodbc.Connection, table_name: str, schema: str = None) -> bool:
         """Drop table if it exists. Returns True if table was dropped, False if it didn't exist."""
         if schema is None:
             schema = self.data_schema
-            
+
         cursor = connection.cursor()
-        
+
         # Check if table exists
         cursor.execute("""
-            SELECT COUNT(*) 
-            FROM INFORMATION_SCHEMA.TABLES 
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.TABLES
             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
         """, schema, table_name)
-        
+
         table_exists = cursor.fetchone()[0] > 0
-        
+
         if table_exists:
             # Drop the table
             drop_sql = f"DROP TABLE [{schema}].[{table_name}]"
@@ -291,21 +285,21 @@ class DatabaseManager:
         else:
             print(f"INFO: Table [{schema}].[{table_name}] does not exist, no drop needed")
             return False
-    
+
     def create_backup_table(self, connection: pyodbc.Connection, table_name: str, columns: List[Dict[str, str]]) -> None:
         """Create a backup table with version tracking, validating schema compatibility"""
         backup_table_name = f"{table_name}_backup"
         cursor = connection.cursor()
-        
+
         # Check if backup table already exists
         cursor.execute("""
-            SELECT COUNT(*) 
-            FROM INFORMATION_SCHEMA.TABLES 
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.TABLES
             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
         """, self.backup_schema, backup_table_name)
-        
+
         backup_exists = cursor.fetchone()[0] > 0
-        
+
         if backup_exists:
             # Validate schema compatibility and sync if needed
             if self._backup_schema_matches(connection, backup_table_name, columns):
@@ -316,7 +310,7 @@ class DatabaseManager:
                 # Schema doesn't match, attempt to sync backup table schema
                 print(f"INFO: Backup table schema mismatch detected for {backup_table_name}")
                 sync_result = self._sync_backup_table_schema(connection, backup_table_name, columns)
-                
+
                 if sync_result['success']:
                     print(f"INFO: Successfully synced backup table schema: {sync_result['summary']}")
                     return
@@ -324,17 +318,17 @@ class DatabaseManager:
                     # If sync fails, fallback to rename and recreate as last resort
                     print(f"WARNING: Could not sync backup table schema: {sync_result['error']}")
                     print(f"INFO: Falling back to rename and recreate strategy as last resort")
-                    
+
                     timestamp_suffix = self._get_timestamp_suffix()
                     old_backup_name = f"{backup_table_name}_{timestamp_suffix}"
-                    
+
                     # Rename existing backup table to preserve historical data
                     rename_sql = (
                         "EXEC sp_rename '[" + self.backup_schema + "].[" + backup_table_name + "]', '" + old_backup_name + "'"
                     )
                     cursor.execute(rename_sql)
                     print(f"INFO: Preserved historical backup data by renaming to {old_backup_name}")
-        
+
         # Build column definitions (same as main table)
         column_defs = []
         for col in columns:
@@ -343,36 +337,36 @@ class DatabaseManager:
             col_def = f"[{col['name']}] {normalized_type}"
             column_defs.append(col_def)
             print(f"DEBUG: Backup table column: {col['name']} -> {normalized_type}")
-        
+
         # Add backup-specific columns
         column_defs.extend([
             "[ref_data_loadtime] datetime",
             "[ref_data_loadtype] varchar(255)",
             "[ref_data_version_id] int NOT NULL"
         ])
-        
+
         # Create the backup table with proper schema quoting
         create_sql = (
             "CREATE TABLE [" + self.backup_schema + "].[" + backup_table_name + "] (" +
             ', '.join(column_defs) + ")"
         )
         cursor.execute(create_sql)
-    
+
     def _backup_schema_matches(self, connection: pyodbc.Connection, backup_table_name: str, expected_columns: List[Dict[str, str]]) -> bool:
         """Check if existing backup table schema matches expected columns including data types"""
         try:
             print(f"DEBUG: Validating backup table schema for {backup_table_name}")
-            
+
             # Get existing backup table columns (excluding metadata columns)
             existing_columns = self.get_table_columns(connection, backup_table_name, self.backup_schema)
-            
+
             # Filter out backup-specific metadata columns
-            data_columns = [col for col in existing_columns 
+            data_columns = [col for col in existing_columns
                            if col['name'] not in ['ref_data_loadtime', 'ref_data_loadtype', 'ref_data_version_id']]
-            
+
             print(f"DEBUG: Found {len(data_columns)} data columns in existing backup table")
             print(f"DEBUG: Expected {len(expected_columns)} columns from main table")
-            
+
             # Create comparison sets (normalize data types)
             expected_set = set()
             for col in expected_columns:
@@ -380,59 +374,59 @@ class DatabaseManager:
                 col_type = self._normalize_data_type(col['data_type'], col.get('max_length'), col.get('numeric_precision'), col.get('numeric_scale'))
                 expected_set.add((col_name, col_type))
                 print(f"DEBUG: Expected column: {col_name} -> {col_type}")
-            
+
             existing_set = set()
             for col in data_columns:
                 col_name = col['name'].lower()
                 col_type = self._normalize_data_type(col['data_type'], col.get('max_length'), col.get('numeric_precision'), col.get('numeric_scale'))
                 existing_set.add((col_name, col_type))
                 print(f"DEBUG: Existing column: {col_name} -> {col_type}")
-            
+
             # Check for differences
             missing_in_backup = expected_set - existing_set
             extra_in_backup = existing_set - expected_set
-            
+
             if missing_in_backup:
                 print(f"DEBUG: Missing columns in backup table: {missing_in_backup}")
             if extra_in_backup:
                 print(f"DEBUG: Extra columns in backup table: {extra_in_backup}")
-            
+
             schema_matches = expected_set == existing_set
             print(f"DEBUG: Backup table schema matches: {schema_matches}")
-            
+
             return schema_matches
-            
+
         except Exception as e:
             # If we can't validate schema, assume it doesn't match to be safe
             print(f"WARNING: Could not validate backup table schema: {str(e)}")
             return False
-    
+
     def _sync_backup_table_schema(self, connection: pyodbc.Connection, backup_table_name: str, expected_columns: List[Dict[str, str]]) -> dict:
         """Attempt to sync backup table schema with expected columns by adding/modifying columns including data types"""
         print(f"DEBUG: Starting backup table schema sync for {backup_table_name}")
         try:
             cursor = connection.cursor()
-            
+
             # Get existing backup table columns
             existing_columns = self.get_table_columns(connection, backup_table_name, self.backup_schema)
-            
+
             # Filter out backup-specific metadata columns for comparison
-            data_columns = {col['name'].lower(): col for col in existing_columns 
+            data_columns = {col['name'].lower(): col for col in existing_columns
                            if col['name'] not in ['ref_data_loadtime', 'ref_data_loadtype', 'ref_data_version_id']}
-            
+
             # Track changes made
             changes = {
                 'added': [],
                 'modified': [],
                 'errors': []
             }
-            
+
             # Process each expected column
             for expected_col in expected_columns:
                 col_name = expected_col['name']
                 col_name_lower = col_name.lower()
                 expected_type = expected_col['data_type']
-                
+
                 if col_name_lower not in data_columns:
                     # Column doesn't exist, add it
                     try:
@@ -450,7 +444,7 @@ class DatabaseManager:
                     existing_col = data_columns[col_name_lower]
                     existing_type = self._normalize_data_type(existing_col['data_type'], existing_col.get('max_length'), existing_col.get('numeric_precision'), existing_col.get('numeric_scale'))
                     expected_type_norm = self._normalize_data_type(expected_col['data_type'], expected_col.get('max_length'), expected_col.get('numeric_precision'), expected_col.get('numeric_scale'))
-                    
+
                     if existing_type != expected_type_norm:
                         # Check if this is a safe modification (e.g., widening varchar)
                         if self._is_safe_column_modification(existing_col, expected_col):
@@ -458,8 +452,8 @@ class DatabaseManager:
                                 alter_sql = f"ALTER TABLE [{self.backup_schema}].[{backup_table_name}] ALTER COLUMN [{col_name}] {expected_type_norm}"
                                 cursor.execute(alter_sql)
                                 changes['modified'].append({
-                                    'column': col_name, 
-                                    'from': existing_type, 
+                                    'column': col_name,
+                                    'from': existing_type,
                                     'to': expected_type_norm
                                 })
                                 print(f"INFO: Modified column [{col_name}] from {existing_type} to {expected_type_norm}")
@@ -472,15 +466,15 @@ class DatabaseManager:
                             error_msg = f"Incompatible type change for column {col_name}: {existing_type} -> {expected_type_norm}"
                             changes['errors'].append(error_msg)
                             print(f"ERROR: {error_msg} - this will trigger backup table recreation")
-            
+
             # Check for extra columns in backup table that aren't in expected columns
             expected_col_names = {col['name'].lower() for col in expected_columns}
-            extra_columns = [col_name for col_name in data_columns.keys() 
+            extra_columns = [col_name for col_name in data_columns.keys()
                             if col_name not in expected_col_names]
-            
+
             if extra_columns:
                 print(f"INFO: Backup table has extra columns that will be preserved: {extra_columns}")
-            
+
             # Commit changes if no errors
             if changes['errors']:
                 connection.rollback()
@@ -496,15 +490,15 @@ class DatabaseManager:
                     summary_parts.append(f"added {len(changes['added'])} columns")
                 if changes['modified']:
                     summary_parts.append(f"modified {len(changes['modified'])} columns")
-                
+
                 summary = ", ".join(summary_parts) if summary_parts else "no changes needed"
-                
+
                 return {
                     'success': True,
                     'summary': summary,
                     'changes': changes
                 }
-                
+
         except Exception as e:
             connection.rollback()
             return {
@@ -512,47 +506,47 @@ class DatabaseManager:
                 'error': f"Unexpected error during schema sync: {str(e)}",
                 'changes': {}
             }
-    
+
     def _is_safe_column_modification(self, existing_col: dict, expected_col: dict) -> bool:
         """Check if a column modification is safe (e.g., widening varchar, compatible type changes)"""
         # Use normalized types for comparison
         existing_type = self._normalize_data_type(existing_col['data_type'], existing_col.get('max_length'), existing_col.get('numeric_precision'), existing_col.get('numeric_scale')).lower()
         expected_type = self._normalize_data_type(expected_col['data_type'], expected_col.get('max_length'), expected_col.get('numeric_precision'), expected_col.get('numeric_scale')).lower()
-        
+
         print(f"DEBUG: Checking safety of column modification: {existing_type} -> {expected_type}")
-        
+
         # Extract base types
         if 'varchar' in existing_type and 'varchar' in expected_type:
             # Check if we're widening varchar
             import re
             existing_match = re.search(r'varchar\((\d+)\)', existing_type)
             expected_match = re.search(r'varchar\((\d+)\)', expected_type)
-            
+
             if existing_match and expected_match:
                 existing_length = int(existing_match.group(1))
                 expected_length = int(expected_match.group(1))
                 return expected_length >= existing_length
-            
+
             # If one is varchar(max), that's generally safe
             if 'max' in expected_type:
                 return True
-        
+
         # Extract base types
         existing_base = existing_type.split('(')[0]
         expected_base = expected_type.split('(')[0]
-        
+
         # Explicitly reject incompatible type changes
         incompatible_changes = {
             ('varchar', 'decimal'), ('varchar', 'numeric'), ('varchar', 'int'), ('varchar', 'bigint'),
             ('decimal', 'varchar'), ('numeric', 'varchar'), ('int', 'varchar'), ('bigint', 'varchar'),
             ('decimal', 'int'), ('int', 'decimal'), ('numeric', 'int'), ('int', 'numeric')
         }
-        
+
         # Check for explicitly incompatible changes
         if (existing_base, expected_base) in incompatible_changes:
             print(f"DEBUG: Rejecting incompatible type change: {existing_base} -> {expected_base}")
             return False
-        
+
         # Safe type conversions (same base type or compatible widening)
         safe_conversions = {
             'int': ['bigint'],
@@ -563,20 +557,20 @@ class DatabaseManager:
             'char': ['varchar', 'nvarchar'],
             'varchar': ['nvarchar']
         }
-        
+
         if existing_base == expected_base:
             return True
-        
+
         if existing_base in safe_conversions:
             return expected_base in safe_conversions[existing_base]
-        
+
         print(f"DEBUG: Rejecting unsafe type change: {existing_base} -> {expected_base}")
         return False
-    
+
     def _normalize_data_type(self, data_type: str, max_length: int = None, numeric_precision: int = None, numeric_scale: int = None) -> str:
         """Normalize data type for comparison (handle varchar, decimal, and other type variations)"""
         data_type = data_type.lower().strip()
-        
+
         # Handle varchar with lengths
         if data_type.startswith('varchar'):
             if max_length == -1:
@@ -591,7 +585,7 @@ class DatabaseManager:
                     return f'varchar({match.group(1).lower()})'
                 else:
                     return 'varchar(4000)'  # Default fallback
-        
+
         # Handle nvarchar with lengths
         elif data_type.startswith('nvarchar'):
             if max_length == -1:
@@ -606,7 +600,7 @@ class DatabaseManager:
                     return f'nvarchar({match.group(1).lower()})'
                 else:
                     return 'nvarchar(4000)'  # Default fallback
-        
+
         # Handle decimal/numeric with precision and scale
         elif data_type.startswith(('decimal', 'numeric')):
             # Use provided precision and scale from INFORMATION_SCHEMA
@@ -624,8 +618,8 @@ class DatabaseManager:
                 else:
                     # If no precision/scale specified, use default
                     return 'decimal(18,0)'
-        
-        # Handle char with lengths  
+
+        # Handle char with lengths
         elif data_type.startswith('char') and not data_type.startswith('varchar'):
             if max_length is not None:
                 return f'char({max_length})'
@@ -636,15 +630,15 @@ class DatabaseManager:
                     return f'char({match.group(1)})'
                 else:
                     return 'char(1)'  # Default fallback
-        
+
         # For other types, return as-is (int, bigint, datetime, etc.)
         return data_type
-    
+
     def _get_timestamp_suffix(self) -> str:
         """Generate timestamp suffix in format yyyyMMddHHmmss"""
         from datetime import datetime
         return datetime.now().strftime('%Y%m%d%H%M%S')
-    
+
     def create_validation_procedure(self, connection: pyodbc.Connection, table_name: str) -> None:
         """Ensure a validation stored procedure exists for the table.
         Will NOT drop/recreate if it already exists (idempotent)."""
@@ -670,16 +664,16 @@ class DatabaseManager:
                 EXEC sp_executesql @sql
             END
         """, proc_name, self.validation_sp_schema, proc_name)
-    
+
     def execute_validation_procedure(self, connection: pyodbc.Connection, table_name: str) -> Dict[str, Any]:
         """Execute the validation stored procedure and return results"""
         proc_name = f"sp_ref_validate_{table_name}"
-        
+
         cursor = connection.cursor()
         # Use dynamic SQL with proper quoting for stored procedure execution
         exec_sql = "EXEC [" + self.validation_sp_schema + "].[" + proc_name + "]"
         cursor.execute(exec_sql)
-        
+
         result = cursor.fetchone()
         if result:
             # Parse JSON result
@@ -696,21 +690,21 @@ class DatabaseManager:
                     }
                 ]
             }
-    
+
     def ensure_backup_table_metadata_columns(self, connection: pyodbc.Connection, backup_table_name: str) -> Dict[str, Any]:
         """Ensure backup table has all required metadata columns"""
         cursor = connection.cursor()
         existing_cols_list = self.get_table_columns(connection, backup_table_name, self.backup_schema)
         existing_cols = {c['name'].lower(): c for c in existing_cols_list}
         actions = {"added": [], "skipped": []}
-        
+
         # Define required backup metadata columns
         backup_metadata_columns = [
             {"name": "ref_data_loadtime", "data_type": "datetime", "default": ""},
             {"name": "ref_data_loadtype", "data_type": "varchar(255)", "default": ""},
             {"name": "ref_data_version_id", "data_type": "int NOT NULL", "default": ""}
         ]
-        
+
         for meta_col in backup_metadata_columns:
             col_name_lower = meta_col["name"].lower()
             if col_name_lower not in existing_cols:
@@ -721,54 +715,54 @@ class DatabaseManager:
                 print(f"Added metadata column {meta_col['name']} to backup table {backup_table_name}")
             else:
                 actions["skipped"].append({"column": meta_col["name"], "reason": "already exists"})
-        
+
         return actions
 
     def backup_existing_data(self, connection: pyodbc.Connection, source_table: str, backup_table: str) -> int:
         """Backup existing data to backup table with version increment, filtering out trailer rows"""
         cursor = connection.cursor()
-        
+
         print(f"DEBUG: Starting backup - source_table: {source_table}, backup_table: {backup_table}")
         try:
             # Get the next version ID - use dynamic SQL with proper quoting
             version_sql = "SELECT COALESCE(MAX(ref_data_version_id), 0) + 1 FROM [" + self.backup_schema + "].[" + backup_table + "_backup]"
             cursor.execute(version_sql)
             next_version = cursor.fetchone()[0]
-            
+
             # Get column lists for explicit backup (avoid SELECT *)
             source_columns = self.get_table_columns(connection, source_table, self.data_schema)
             backup_columns = self.get_table_columns(connection, backup_table + "_backup", self.backup_schema)
-            
+
             # Filter source columns to exclude metadata columns (backup table has different metadata structure)
             source_data_columns = [col for col in source_columns if col['name'].lower() not in ['ref_data_loadtime', 'ref_data_loadtype']]
-            
+
             # Build column lists for INSERT and SELECT
             insert_columns = []
             select_columns = []
-            
+
             # Add matching data columns
             for backup_col in backup_columns:
                 backup_col_name = backup_col['name']
                 backup_col_lower = backup_col_name.lower()
-                
+
                 # Skip backup-specific metadata columns for now
                 if backup_col_lower in ['ref_data_loadtime', 'ref_data_loadtype', 'ref_data_version_id']:
                     continue
-                
+
                 # Find matching source column
                 matching_source_col = next((col for col in source_data_columns if col['name'].lower() == backup_col_lower), None)
                 if matching_source_col:
                     insert_columns.append(f"[{backup_col_name}]")
                     select_columns.append(f"[{matching_source_col['name']}]")
-            
+
             # Add backup metadata columns
             insert_columns.extend(["[ref_data_loadtime]", "[ref_data_loadtype]", "[ref_data_version_id]"])
             select_columns.extend(["GETDATE()", "'backup'", "?"])
-            
+
             # Build explicit column backup SQL
             insert_column_list = ", ".join(insert_columns)
             select_column_list = ", ".join(select_columns)
-            
+
             backup_sql = (
                 f"INSERT INTO [{self.backup_schema}].[{backup_table}_backup] ({insert_column_list}) "
                 f"SELECT {select_column_list} FROM [{self.data_schema}].[{source_table}]"
@@ -778,7 +772,7 @@ class DatabaseManager:
             backup_count = cursor.rowcount
             print(f"DEBUG: Backup completed successfully - {backup_count} rows backed up to version {next_version}")
             return backup_count
-                    
+
         except Exception as e:
             connection.rollback()
             # If backup fails due to schema issues, log warning and continue
@@ -792,46 +786,46 @@ class DatabaseManager:
                 return 0  # Continue without backup
             else:
                 raise Exception(f"Failed to backup existing data from {source_table}: {str(e)}")
-    
+
     def truncate_table(self, connection: pyodbc.Connection, table_name: str, schema: str = None) -> None:
         """Truncate a table"""
         if schema is None:
             schema = self.data_schema
-            
+
         cursor = connection.cursor()
         # Use dynamic SQL with proper quoting for TRUNCATE
         truncate_sql = "TRUNCATE TABLE [" + schema + "].[" + table_name + "]"
         cursor.execute(truncate_sql)
-    
+
     def get_row_count(self, connection: pyodbc.Connection, table_name: str, schema: str = None) -> int:
         """Get row count for a table"""
         if schema is None:
             schema = self.data_schema
-            
+
         cursor = connection.cursor()
         # Use dynamic SQL with proper quoting for COUNT
         count_sql = "SELECT COUNT(*) FROM [" + schema + "].[" + table_name + "]"
         cursor.execute(count_sql)
-        
+
         result = cursor.fetchone()
         return result[0] if result else 0
-    
+
     def ensure_metadata_columns(self, connection: pyodbc.Connection, table_name: str, schema: str = None) -> Dict[str, Any]:
         """Ensure metadata columns (ref_data_loadtime, ref_data_loadtype) exist in the table"""
         if schema is None:
             schema = self.data_schema
-        
+
         cursor = connection.cursor()
         existing_cols_list = self.get_table_columns(connection, table_name, schema)
         existing_cols = {c['name'].lower(): c for c in existing_cols_list}
         actions = {"added": [], "skipped": []}
-        
+
         # Define required metadata columns
         metadata_columns = [
             {"name": "ref_data_loadtime", "data_type": "datetime", "default": "DEFAULT GETDATE()"},
             {"name": "ref_data_loadtype", "data_type": "varchar(255)", "default": ""}
         ]
-        
+
         for meta_col in metadata_columns:
             col_name_lower = meta_col["name"].lower()
             if col_name_lower not in existing_cols:
@@ -843,57 +837,57 @@ class DatabaseManager:
                 print(f"Added metadata column {meta_col['name']} to {schema}.{table_name}")
             else:
                 actions["skipped"].append({"column": meta_col["name"], "reason": "already exists"})
-        
+
         return actions
-    
+
     def sync_main_table_columns(self, connection: pyodbc.Connection, table_name: str, file_columns: List[Dict[str, str]], schema: str = None) -> Dict[str, Any]:
         """Safely synchronize main table columns with input file columns.
         ONLY ADDS missing columns - NEVER modifies existing column data types.
         This preserves data integrity and existing table structure.
-        
+
         Args:
             connection: Database connection
             table_name: Name of the main table
             file_columns: List of columns from input file [{'name': ..., 'data_type': ...}]
             schema: Table schema (defaults to data_schema)
-            
+
         Returns:
             Dict with 'added', 'skipped', 'mismatched' lists
         """
         if schema is None:
             schema = self.data_schema
-            
+
         cursor = connection.cursor()
-        
+
         # Get existing table columns (excluding metadata columns for comparison)
         existing_cols_list = self.get_table_columns(connection, table_name, schema)
-        existing_cols = {c['name'].lower(): c for c in existing_cols_list 
+        existing_cols = {c['name'].lower(): c for c in existing_cols_list
                         if c['name'].lower() not in ['ref_data_loadtime', 'ref_data_loadtype']}
-        
+
         actions = {
             "added": [],           # Columns successfully added
             "skipped": [],         # Columns that already exist (no change)
             "mismatched": []       # Columns that exist but with different data types (no change)
         }
-        
+
         print(f"INFO: Synchronizing main table [{schema}].[{table_name}] columns with input file")
         existing_cols_display = [f"{c['name']}({c['data_type']})" for c in existing_cols_list if c['name'].lower() not in ['ref_data_loadtime', 'ref_data_loadtype']]
         file_cols_display = [f"{c['name']}({c['data_type']})" for c in file_columns]
         print(f"INFO: Existing table columns: {existing_cols_display}")
         print(f"INFO: Input file columns: {file_cols_display}")
-        
+
         for file_col in file_columns:
             col_name = file_col['name']
             col_name_lower = col_name.lower()
             file_data_type = file_col['data_type']
-            
+
             if col_name_lower not in existing_cols:
                 # Column doesn't exist in table - ADD it
                 try:
                     add_col_sql = f"ALTER TABLE [{schema}].[{table_name}] ADD [{col_name}] {file_data_type}"
                     cursor.execute(add_col_sql)
                     actions["added"].append({
-                        "column": col_name, 
+                        "column": col_name,
                         "data_type": file_data_type
                     })
                     print(f"INFO: Added column [{col_name}] {file_data_type} to main table")
@@ -906,11 +900,11 @@ class DatabaseManager:
                 existing_col = existing_cols[col_name_lower]
                 existing_type = existing_col['data_type']
                 existing_max_length = existing_col.get('max_length')
-                
+
                 # Normalize types for comparison
                 existing_type_normalized = self._normalize_data_type(existing_type, existing_max_length)
                 file_type_normalized = self._normalize_data_type(file_data_type)
-                
+
                 if existing_type_normalized == file_type_normalized:
                     # Types match - no action needed
                     actions["skipped"].append({
@@ -927,18 +921,18 @@ class DatabaseManager:
                         "action": "preserved existing type (no modification)"
                     })
                     print(f"WARNING: Column [{col_name}] type mismatch - table has {existing_type_normalized}, file has {file_type_normalized}. Preserving table type.")
-        
+
         # Check for extra columns in table that aren't in file
         file_col_names = {col['name'].lower() for col in file_columns}
-        extra_table_cols = [col_name for col_name in existing_cols.keys() 
+        extra_table_cols = [col_name for col_name in existing_cols.keys()
                            if col_name not in file_col_names]
-        
+
         if extra_table_cols:
             print(f"INFO: Table has {len(extra_table_cols)} extra columns not in input file (preserved): {list(extra_table_cols)}")
-        
+
         # Commit changes
         connection.commit()
-        
+
         # Summary reporting
         summary_parts = []
         if actions['added']:
@@ -947,10 +941,10 @@ class DatabaseManager:
             summary_parts.append(f"preserved {len(actions['mismatched'])} mismatched columns")
         if actions['skipped']:
             summary_parts.append(f"skipped {len(actions['skipped'])} existing columns")
-        
+
         summary = ", ".join(summary_parts) if summary_parts else "no changes needed"
         print(f"INFO: Main table column sync completed: {summary}")
-        
+
         return actions
 
     def sync_table_schema(self, connection: pyodbc.Connection, table_name: str, columns: List[Dict[str, str]], schema: str = None) -> Dict[str, Any]:
@@ -966,7 +960,7 @@ class DatabaseManager:
         existing_cols_list = self.get_table_columns(connection, table_name, schema)
         existing_cols = {c['name'].lower(): c for c in existing_cols_list}
         actions = {"added": [], "widened": [], "skipped": []}
-        
+
         # Debug: log existing column types
         print(f"DEBUG: Existing columns in {table_name}: {[(c['name'], c['data_type'], c.get('max_length')) for c in existing_cols_list]}")
         print(f"DEBUG: Target columns: {[(c['name'], c['data_type']) for c in columns]}")
@@ -984,15 +978,15 @@ class DatabaseManager:
             existing = existing_cols[lower]
             existing_type = existing['data_type']
             existing_max_length = existing.get('max_length')
-            
+
             # Handle varchar column widening
             import re as _re
-            
+
             # Parse target type
             is_new_varchar_max = target_type.lower() == 'varchar(max)'
             m_new = _re.fullmatch(r'varchar\((\d+)\)', target_type, flags=_re.IGNORECASE) if not is_new_varchar_max else None
             new_len = int(m_new.group(1)) if m_new else ('MAX' if is_new_varchar_max else None)
-            
+
             # Parse existing type - SQL Server returns 'varchar' with separate max_length field
             is_varchar_column = existing_type and existing_type.lower() == 'varchar'
             if is_varchar_column:
@@ -1006,17 +1000,17 @@ class DatabaseManager:
             else:
                 # For other data types or non-varchar columns
                 old_len = None
-            
+
             # Determine if schema change is needed
             need_change = False
             change_type = None
-            
+
             # Handle any non-varchar column to varchar conversion (for varchar-only approach)
             is_datetime_column = existing_type and existing_type.lower() in ['datetime', 'date', 'time', 'datetime2', 'smalldatetime', 'datetimeoffset']
             is_numeric_column = existing_type and existing_type.lower() in ['int', 'bigint', 'smallint', 'tinyint', 'decimal', 'numeric', 'float', 'real', 'money', 'smallmoney']
             is_other_column = existing_type and not is_varchar_column and not is_datetime_column and not is_numeric_column
             target_is_varchar = target_type.lower().startswith('varchar')
-            
+
             if (is_datetime_column or is_numeric_column or is_other_column) and target_is_varchar:
                 # Convert non-varchar column to varchar
                 need_change = True
@@ -1031,7 +1025,7 @@ class DatabaseManager:
                     # Widen numeric varchar length
                     need_change = True
                     change_type = "varchar_widen"
-            
+
             if need_change:
                 if change_type == "convert_to_varchar":
                     # Convert non-varchar column to varchar - use dynamic SQL with proper quoting
@@ -1054,21 +1048,19 @@ class DatabaseManager:
                         reason = "no widening needed"
                 actions["skipped"].append({"column": name, "reason": reason})
         return actions
-
-    
     def ensure_reference_data_cfg_table(self, connection: pyodbc.Connection) -> None:
         """Ensure Reference_Data_Cfg table exists in staff database dbo schema (configurable via staff_database env var)"""
         cursor = connection.cursor()
-        
+
         # Check if table exists in staff database dbo schema
         table_exists_sql = f"""
-            SELECT COUNT(*) 
-            FROM [{self.staff_database}].INFORMATION_SCHEMA.TABLES 
+            SELECT COUNT(*)
+            FROM [{self.staff_database}].INFORMATION_SCHEMA.TABLES
             WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Reference_Data_Cfg'
         """
         cursor.execute(table_exists_sql)
         exists = cursor.fetchone()[0] > 0
-        
+
         if not exists:
             # Create the Reference_Data_Cfg table
             create_table_sql = f"""
@@ -1082,35 +1074,35 @@ class DatabaseManager:
                 ) ON [PRIMARY]
             """
             cursor.execute(create_table_sql)
-            
+
             # Add primary key constraint
             add_pk_sql = f"""
-                ALTER TABLE [{self.staff_database}].[dbo].[Reference_Data_Cfg] 
-                ADD CONSTRAINT [pk_ref_data_cfg] PRIMARY KEY CLUSTERED 
+                ALTER TABLE [{self.staff_database}].[dbo].[Reference_Data_Cfg]
+                ADD CONSTRAINT [pk_ref_data_cfg] PRIMARY KEY CLUSTERED
                 ([ref_name] ASC)
-                WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, 
-                      IGNORE_DUP_KEY = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) 
+                WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF,
+                      IGNORE_DUP_KEY = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON)
                 ON [PRIMARY]
             """
             cursor.execute(add_pk_sql)
-            
+
             connection.commit()
             print("Created Reference_Data_Cfg table in dbo schema")
-    
+
     def ensure_postload_stored_procedure(self, connection: pyodbc.Connection) -> None:
         """Ensure ref.usp_reference_data_{database_name} stored procedure exists"""
         cursor = connection.cursor()
-        
+
         try:
             # Check if stored procedure exists in ref schema
             check_sp_sql = f"""
-                SELECT COUNT(*) 
-                FROM INFORMATION_SCHEMA.ROUTINES 
+                SELECT COUNT(*)
+                FROM INFORMATION_SCHEMA.ROUTINES
                 WHERE ROUTINE_SCHEMA = 'ref' AND ROUTINE_NAME = '{self.postload_sp_name}' AND ROUTINE_TYPE = 'PROCEDURE'
             """
             cursor.execute(check_sp_sql)
             exists = cursor.fetchone()[0] > 0
-            
+
             if not exists:
                 # Create empty stored procedure
                 create_sp_sql = f"""
@@ -1127,13 +1119,13 @@ class DatabaseManager:
                 print(f"Created empty ref.{self.postload_sp_name} stored procedure")
             else:
                 print(f"ref.{self.postload_sp_name} stored procedure already exists")
-                
+
         except Exception as e:
             connection.rollback()
             error_msg = f"Failed to create ref.{self.postload_sp_name} stored procedure: {str(e)}"
             print(f"WARNING: {error_msg}")
             # Don't raise - this shouldn't fail the entire startup
-    
+
     def determine_load_type(self, connection: pyodbc.Connection, table_name: str, current_load_mode: str, override_load_type: str = None) -> str:
         """
         Determine the ref_data_loadtype value based on existing data and current load mode.
@@ -1142,7 +1134,7 @@ class DatabaseManager:
         - First time ingest: Use current load mode ('F' for full, 'A' for append)
         - Subsequent ingests: Check existing distinct ref_data_loadtype values
           - If only 'F' exists: Use 'F'
-          - If only 'A' exists: Use 'A' 
+          - If only 'A' exists: Use 'A'
           - If both 'A' and 'F' exist: Use 'F'
         """
         try:
@@ -1152,18 +1144,18 @@ class DatabaseManager:
                 if override_upper in ['F', 'A', 'FULL', 'append']:
                     return 'F' if override_upper in ['F', 'FULL'] else 'A'
             cursor = connection.cursor()
-            
+
             # Check if table exists and has data
             if not self.table_exists(connection, table_name):
                 # First time - use current load mode
                 return 'F' if current_load_mode == 'full' else 'A'
-            
+
             # Get row count
             row_count = self.get_row_count(connection, table_name)
             if row_count == 0:
                 # Empty table - use current load mode
                 return 'F' if current_load_mode == 'full' else 'A'
-            
+
             # Get distinct ref_data_loadtype values from existing data
             query = f"SELECT DISTINCT [ref_data_loadtype] FROM [{self.data_schema}].[{table_name}] WHERE [ref_data_loadtype] IS NOT NULL"
             cursor.execute(query)
@@ -1171,7 +1163,7 @@ class DatabaseManager:
             for row in cursor.fetchall():
                 if row[0]:  # Not NULL
                     existing_types.add(row[0].strip().upper())
-            
+
             # Apply rules
             if not existing_types:
                 # No existing ref_data_loadtype data - use current load mode
@@ -1188,7 +1180,7 @@ class DatabaseManager:
             else:
                 # Unknown values - default to current load mode
                 return 'F' if current_load_mode == 'full' else 'A'
-                
+
         except Exception as e:
             # On error, default to current load mode
             print(f"WARNING: Failed to determine load type for {table_name}: {str(e)}")
@@ -1355,16 +1347,16 @@ class DatabaseManager:
         finally:
             connection.autocommit = True
         return outcome
-    
+
     def insert_reference_data_cfg_record(self, connection: pyodbc.Connection, table_name: str) -> None:
         """Insert a record into Reference_Data_Cfg table after successful ingestion"""
         cursor = connection.cursor()
-        
+
         try:
             # Get the current database name
             cursor.execute("SELECT DB_NAME()")
             database_name = cursor.fetchone()[0]
-            
+
             # Prepare the record data
             sp_name = f"usp_RefreshReferenceData_{database_name}"
             ref_name = f"ref_{table_name}"
@@ -1372,20 +1364,20 @@ class DatabaseManager:
             source_schema = "ref"
             source_table = table_name
             is_enabled = 1
-            
+
             # Check if record already exists and compare all columns
             check_sql = f"""
                 SELECT [sp_name], [source_db], [source_schema], [source_table], [is_enabled]
-                FROM [{self.staff_database}].[dbo].[Reference_Data_Cfg] 
+                FROM [{self.staff_database}].[dbo].[Reference_Data_Cfg]
                 WHERE [ref_name] = ?
             """
             cursor.execute(check_sql, ref_name)
             existing_record = cursor.fetchone()
-            
+
             if existing_record is None:
                 # Insert new record if it doesn't exist
                 insert_sql = f"""
-                    INSERT INTO [{self.staff_database}].[dbo].[Reference_Data_Cfg] 
+                    INSERT INTO [{self.staff_database}].[dbo].[Reference_Data_Cfg]
                     ([sp_name], [ref_name], [source_db], [source_schema], [source_table], [is_enabled])
                     VALUES (?, ?, ?, ?, ?, ?)
                 """
@@ -1394,11 +1386,11 @@ class DatabaseManager:
             else:
                 # Compare all columns to see if update is needed
                 existing_sp_name = existing_record[0]
-                existing_source_db = existing_record[1] 
+                existing_source_db = existing_record[1]
                 existing_source_schema = existing_record[2]
                 existing_source_table = existing_record[3]
                 existing_is_enabled = existing_record[4]
-                
+
                 # Check if any values are different
                 needs_update = (
                     existing_sp_name != sp_name or
@@ -1407,12 +1399,12 @@ class DatabaseManager:
                     existing_source_table != source_table or
                     existing_is_enabled != is_enabled
                 )
-                
+
                 if needs_update:
                     # Update existing record with new values
                     update_sql = f"""
-                        UPDATE [{self.staff_database}].[dbo].[Reference_Data_Cfg] 
-                        SET [sp_name] = ?, [source_db] = ?, [source_schema] = ?, 
+                        UPDATE [{self.staff_database}].[dbo].[Reference_Data_Cfg]
+                        SET [sp_name] = ?, [source_db] = ?, [source_schema] = ?,
                             [source_table] = ?, [is_enabled] = ?
                         WHERE [ref_name] = ?
                     """
@@ -1420,9 +1412,9 @@ class DatabaseManager:
                     print(f"Updated Reference_Data_Cfg record for {ref_name} (values changed)")
                 else:
                     print(f"Reference_Data_Cfg record for {ref_name} unchanged - no update needed")
-            
+
             connection.commit()
-            
+
             # Call post-load stored procedure
             try:
                 postload_cursor = connection.cursor()
@@ -1433,7 +1425,7 @@ class DatabaseManager:
                 # Log warning but don't fail the entire process
                 print(f"WARNING: Failed to call ref.{self.postload_sp_name}: {str(sp_error)}")
                 # Don't rollback the Reference_Data_Cfg changes if SP fails
-            
+
         except Exception as e:
             connection.rollback()
             error_msg = f"Failed to insert/update Reference_Data_Cfg record for {table_name}: {str(e)}"

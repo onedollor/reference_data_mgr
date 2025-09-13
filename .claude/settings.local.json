@@ -52,13 +52,17 @@
       "Bash(awk:*)",
       "mcp__sequential-thinking__sequentialthinking",
       "Bash(cat:*)",
-      "Bash(./start_simplified_monitor.sh:*)"
+      "Bash(./start_simplified_monitor.sh:*)",
+      "Bash(./debug_component.sh:*)",
+      "Bash(xargs:*)"
     ],
     "deny": []
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "context7",
     "playwright",
-    "sequential-thinking"
+    "sequential-thinking",
+    "spec-workflow"
   ]
 }
