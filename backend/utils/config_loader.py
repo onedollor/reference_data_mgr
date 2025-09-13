@@ -144,6 +144,8 @@ class ConfigLoader:
             'archive_location': self.get('archive_location', 'C:\\data\\reference_data\\archive', 'file_handling'),
             'format_location': self.get('format_location', 'C:\\data\\reference_data\\format', 'file_handling'),
             'dropoff_path': self.get('dropoff_path', '/home/lin/repo/reference_data_mgr/data/reference_data/dropoff', 'file_handling'),
+            'processed_location': self.get('processed_location', '/home/lin/repo/reference_data_mgr/data/reference_data/processed', 'file_handling'),
+            'error_location': self.get('error_location', '/home/lin/repo/reference_data_mgr/data/reference_data/error', 'file_handling'),
             'max_upload_size': self.get('max_upload_size', 20971520, 'file_handling'),
         }
         return config

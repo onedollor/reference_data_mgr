@@ -287,11 +287,13 @@ class ExcelApprovalMonitor:
     def move_processed_files(self, csv_path: str, excel_path: str):
         """Move successfully processed files to processed directory"""
         try:
+            from utils.config_loader import config
+            file_config = config.get_file_config()
+            processed_dir = Path(file_config['processed_location'])
+            processed_dir.mkdir(parents=True, exist_ok=True)
+
             csv_file = Path(csv_path)
             excel_file = Path(excel_path)
-
-            processed_dir = csv_file.parent / "processed"
-            processed_dir.mkdir(exist_ok=True)
 
             # Move both files
             csv_processed_path = processed_dir / csv_file.name
@@ -310,11 +312,13 @@ class ExcelApprovalMonitor:
     def move_error_files(self, csv_path: str, excel_path: str, error_message: str):
         """Move failed files to error directory"""
         try:
+            from utils.config_loader import config
+            file_config = config.get_file_config()
+            error_dir = Path(file_config['error_location'])
+            error_dir.mkdir(parents=True, exist_ok=True)
+
             csv_file = Path(csv_path)
             excel_file = Path(excel_path)
-
-            error_dir = csv_file.parent / "error"
-            error_dir.mkdir(exist_ok=True)
 
             # Move both files
             csv_error_path = error_dir / csv_file.name

@@ -22,15 +22,22 @@ class DataIngester:
         self.logger = logger
         self.file_handler = FileHandler()
         # Batch / progress parameters (only multi-row batching retained)
-        # Fixed batch size (multi-row VALUES per insert) explicitly set to 990
-        self.batch_size = 990
+        # Fixed batch size cap (SQL Server max 1000 VALUES rows) – we'll cap at 990
         from .config_loader import config
         ingest_config = config.get_ingest_config()
+        # Save for reference and derive attributes
+        self.ingest_config = ingest_config
+        # Use configured batch size but hard-cap at 990 for safety
+        try:
+            self.batch_size = min(int(ingest_config.get('batch_size', 990)), 990)
+        except Exception:
+            self.batch_size = 990
         self.progress_batch_interval = ingest_config['progress_interval']
         # Type inference
         self.enable_type_inference = ingest_config['type_inference']
         self.type_sample_rows = ingest_config['type_sample_rows']
         self.date_parse_threshold = ingest_config['date_threshold']
+        self.slow_progress_demo = ingest_config.get('slow_progress_demo', False)
         # Legacy bulk/stream settings removed.
 
     async def ingest_data(
@@ -124,6 +131,13 @@ class DataIngester:
                 if progress_key:
                     prog.request_cancel(progress_key)
                     yield "Upload process automatically canceled due to empty file"
+                # Move file to error folder
+                try:
+                    if file_path and os.path.exists(file_path):
+                        err_path = self.file_handler.move_to_error(file_path, filename)
+                        yield f"File moved to error folder: {os.path.basename(err_path)}"
+                except Exception as move_err:
+                    yield f"WARNING: Failed to move file to error folder: {move_err}"
                 return
 
             # Step 5: Process headers
@@ -140,7 +154,13 @@ class DataIngester:
                 if progress_key:
                     prog.request_cancel(progress_key)
                     yield "Upload process automatically canceled due to invalid headers"
-
+                # Move file to error folder
+                try:
+                    if file_path and os.path.exists(file_path):
+                        err_path = self.file_handler.move_to_error(file_path, filename)
+                        yield f"File moved to error folder: {os.path.basename(err_path)}"
+                except Exception as move_err:
+                    yield f"WARNING: Failed to move file to error folder: {move_err}"
                 return
             yield f"Headers processed: {len(valid_headers)} valid columns ({(time.perf_counter()-t_headers):.2f}s)"
 
@@ -369,7 +389,13 @@ class DataIngester:
                 if progress_key:
                     prog.request_cancel(progress_key)
                     yield "Upload process automatically canceled due to validation errors"
-
+                # Move file to error folder
+                try:
+                    if file_path and os.path.exists(file_path):
+                        err_path = self.file_handler.move_to_error(file_path, filename)
+                        yield f"File moved to error folder: {os.path.basename(err_path)}"
+                except Exception as move_err:
+                    yield f"WARNING: Failed to move file to error folder: {move_err}"
                 return
 
             yield f"Data validation passed ({(time.perf_counter()-t_validate):.2f}s)"
@@ -545,6 +571,13 @@ class DataIngester:
                 {"filename": filename, "table_name": table_base_name if 'table_base_name' in locals() else None}
             )
             prog.mark_error(progress_key, error_msg)
+            # Attempt to move the problematic file to an error folder for follow-up
+            try:
+                if file_path and os.path.exists(file_path):
+                    err_path = self.file_handler.move_to_error(file_path, filename)
+                    yield f"File moved to error folder: {os.path.basename(err_path)}"
+            except Exception as move_err:
+                yield f"WARNING: Failed to move file to error folder: {move_err}"
         finally:
             # Restore original schema if it was overridden
             if target_schema and 'original_data_schema' in locals():
@@ -775,10 +808,7 @@ class DataIngester:
             # SQL Server supports maximum 1000 row value expressions per VALUES clause.
             # We intentionally cap at 990 to keep headroom and avoid edge-case failures if additional
             # rows (e.g., metadata) were ever appended in future logic.
-            effective_batch = ingest_config['batch_size']
-            # Cap at 990 for SQL Server safety
-            if effective_batch > 990:
-                effective_batch = 990
+            effective_batch = self.batch_size
             total = len(df)
             start_time = time.perf_counter()
             await self.logger.log_info(
@@ -875,7 +905,7 @@ class DataIngester:
                 await asyncio.sleep(0)  # Yield control to FastAPI event loop
 
                 # Add small delay for demo purposes (remove in production)
-                if ingest_config['slow_progress_demo']:
+                if self.slow_progress_demo:
                     await asyncio.sleep(0.5)  # Half second delay per batch for demonstration
 
                 # Log progress less frequently to avoid spam

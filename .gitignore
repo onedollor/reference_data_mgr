@@ -47,6 +47,15 @@ temp/
 # CSV test outputs
 *.csv
 
+# excel and pdf
+*.xls
+*.xlsx
+*.pdf
+
+#pid files
+*.pid
+*.seed
+
 # Format definition files (ignore all, keep placeholder/example if needed)
 *.fmt
 /backend/C:\\data\\reference_data\\format
