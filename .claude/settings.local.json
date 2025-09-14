@@ -51,7 +51,8 @@
       "Bash(./start_simplified_monitor.sh:*)",
       "Bash(./debug_component.sh:*)",
       "Bash(xargs:*)",
-      "Read(///**)"
+      "Read(///**)",
+      "mcp__spec-workflow__spec-workflow-guide"
     ],
     "deny": []
   },
