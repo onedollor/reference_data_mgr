@@ -163,9 +163,6 @@ call :print_status "Setting up directories..."
 
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 if not exist "%PID_DIR%" mkdir "%PID_DIR%"
-if not exist "%SCRIPT_DIR%\data\reference_data\dropoff" mkdir "%SCRIPT_DIR%\data\reference_data\dropoff"
-if not exist "%SCRIPT_DIR%\data\reference_data\dropoff\processed" mkdir "%SCRIPT_DIR%\data\reference_data\dropoff\processed"
-if not exist "%SCRIPT_DIR%\data\reference_data\dropoff\error" mkdir "%SCRIPT_DIR%\data\reference_data\dropoff\error"
 
 call :print_success "Directories created successfully"
 goto :eof

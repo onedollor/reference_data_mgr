@@ -3,7 +3,6 @@ Excel Form Generation Utility
 Creates interactive Excel configuration forms with dropdowns, validation, and formatting
 """
 
-import os
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -11,7 +10,7 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Border, Side, Alignment
 from openpyxl.worksheet.datavalidation import DataValidation
-from openpyxl.utils import get_column_letter
+import traceback
 
 from .file_handler import FileHandler
 class ExcelFormGenerator:
@@ -281,7 +280,43 @@ class ExcelFormGenerator:
         ws[f'A{row}'].value = "Mode:"
         ws[f'A{row}'].font = label_font
         mode_cell = ws[f'B{row}']
-        mode_cell.value = "Select Mode"  # Prompt user to select
+
+        # Check if table exists and get default load type from ref_data_loadtype column
+        default_mode = "fullload"  # Default prompt
+        try:
+            from .database import DatabaseManager
+            from pathlib import Path
+
+            db_manager = DatabaseManager()
+            csv_file = Path(csv_path)
+            table_name = csv_file.stem.replace('-', '_').replace(' ', '_')
+
+            with db_manager.get_connection() as connection:
+                # Check available schemas to find where table exists
+                available_schemas = db_manager.get_available_schemas(connection)
+                existing_schema = db_manager.get_table_schema(connection, table_name)
+
+                if existing_schema:
+                    # Table exists, try to get ref_data_loadtype column value
+                    cursor = connection.cursor()
+                    cursor.execute(f"""
+                        SELECT TOP 1 ref_data_loadtype
+                        FROM [{existing_schema}].[{table_name}]
+                        WHERE ref_data_loadtype IS NOT NULL
+                    """)
+
+                    result = cursor.fetchone()
+                    if result and result[0]:
+                        ref_data_loadtype = str(result[0]).lower().strip()
+                        if ref_data_loadtype in ['fullload', 'append']:
+                            default_mode = ref_data_loadtype
+
+        except Exception as e:
+            logging.warning(f"Could not determine existing table load type: {str(e)} {traceback.format_exc()}")
+            # If anything fails, use default prompt
+            default_mode = "fullload"
+
+        mode_cell.value = default_mode
         mode_cell.border = border_thin
         mode_cell.fill = PatternFill(start_color="FFEB3B", end_color="FFEB3B", fill_type="solid")  # Yellow highlight
 
@@ -297,7 +332,11 @@ class ExcelFormGenerator:
         ws.add_data_validation(mode_validation)
         mode_validation.add(mode_cell)
 
-        ws[f'C{row}'].value = "fullload=truncate, append=add"
+        # Set comment based on whether default was found
+        if default_mode in ['fullload', 'append']:
+            ws[f'C{row}'].value = f"Default: {default_mode} (from existing table)"
+        else:
+            ws[f'C{row}'].value = "fullload=truncate, append=add"
         row += 1
 
         # Add explanation row
@@ -348,6 +387,53 @@ class ExcelFormGenerator:
         table_name_cell.border = border_thin
 
         ws[f'C{row}'].value = f"Default: {default_table_name} (derived from filename)"
+        row += 1
+
+        # Target Schema
+        ws[f'A{row}'].value = "Target Schema:"
+        ws[f'A{row}'].font = label_font
+        schema_cell = ws[f'B{row}']
+        
+        existing_schema = None
+        # Get available schemas and prioritize existing table's schema
+        try:
+            from .database import DatabaseManager
+            db_manager = DatabaseManager()
+            with db_manager.get_connection() as connection:
+                available_schemas = db_manager.get_available_schemas(connection)
+                existing_schema = db_manager.get_table_schema(connection, default_table_name)
+
+                if 'ref' in available_schemas:
+                    available_schemas.remove('ref')
+                    available_schemas.insert(0, 'ref')  # Always prioritize 'ref' schema
+
+                # If table exists in a specific schema, move that schema to first position
+                if existing_schema and existing_schema in available_schemas:
+                    available_schemas.remove(existing_schema)
+                    available_schemas.insert(0, existing_schema)
+                elif existing_schema and existing_schema not in available_schemas:
+                    # If existing schema is not in available list, add it as first option
+                    available_schemas.insert(0, existing_schema)
+                
+                schema_cell.value = available_schemas[0]
+                
+                # Create dropdown with available schemas
+                schema_formula = ','.join(f'"{schema}"' for schema in available_schemas)
+                schema_validation = DataValidation(type="list", formula1=schema_formula, showDropDown=False)
+                ws.add_data_validation(schema_validation)
+                schema_validation.add(schema_cell)
+                
+        except Exception as e:
+            # Fallback if database connection fails
+            available_schemas = ['ref','dbo']
+            schema_cell.value = available_schemas[0]
+            
+        schema_cell.border = border_thin
+        
+        if existing_schema:
+            ws[f'C{row}'].value = f"Default: {available_schemas[0]} (table exists in this schema)"
+        else:
+            ws[f'C{row}'].value = f"Default: {available_schemas[0]} (new table)"
         row += 1
 
         return row

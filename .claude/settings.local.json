@@ -24,8 +24,6 @@
       "Bash(dotnet build:*)",
       "Bash(dotnet restore:*)",
       "Bash(dotnet run:*)",
-      "Bash(./backend_dotnet/start_backend_dotnet.sh:*)",
-      "Bash(./start_frontend_lite.sh:*)",
       "mcp__playwright__browser_navigate",
       "mcp__playwright__browser_close",
       "mcp__playwright__browser_install",
@@ -33,10 +31,8 @@
       "Bash(kill:*)",
       "Bash(node:*)",
       "Bash(/bashes)",
-      "Bash(DOTNET_ENVIRONMENT=Development ./bin/Release/net6.0/ReferenceDataApi)",
       "Bash(/dev/null)",
       "Read(/home/lin/ComfyUI/input/**)",
-      "Bash(DOTNET_ENVIRONMENT=Development dotnet run --urls http://0.0.0.0:8000)",
       "mcp__context7__resolve-library-id",
       "mcp__context7__get-library-docs",
       "Bash(lsof:*)",
@@ -54,7 +50,8 @@
       "Bash(cat:*)",
       "Bash(./start_simplified_monitor.sh:*)",
       "Bash(./debug_component.sh:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Read(///**)"
     ],
     "deny": []
   },

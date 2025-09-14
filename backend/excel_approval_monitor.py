@@ -17,6 +17,8 @@ from backend_lib import ReferenceDataAPI
 from utils.database import DatabaseManager
 from utils.workflow_manager import WorkflowManager
 from utils.excel_processor import ExcelProcessor
+from utils.pdf_report_generator import PDFReportGenerator
+from utils.report_data_collector import ReportDataCollector
 
 # Monitor settings
 APPROVAL_CHECK_INTERVAL = 30  # seconds - check for approvals every 30 seconds
@@ -34,6 +36,8 @@ class ExcelApprovalMonitor:
         self.db_manager = DatabaseManager()
         self.workflow_manager = WorkflowManager(self.db_manager, self.logger)
         self.excel_processor = ExcelProcessor()
+        self.pdf_generator = PDFReportGenerator()
+        self.report_collector = ReportDataCollector(self.db_manager)
 
         # Initialize backend API for processing
         try:
@@ -177,7 +181,7 @@ class ExcelApprovalMonitor:
                 file_path=processing_config['csv_file_path'],
                 load_type=processing_config['load_type'],
                 table_name=table_name,
-                target_schema="ref",
+                target_schema=processing_config.get('target_schema', 'ref'),
                 config_reference_data=processing_config.get('is_reference_data', False)
             )
 
@@ -194,8 +198,34 @@ class ExcelApprovalMonitor:
                     processing_notes=result.get('message', 'Processing completed successfully')
                 )
 
+                # Generate success PDF report with detailed information
+                report_path = None
+                try:
+                    from utils.config_loader import config
+                    file_config = config.get_file_config()
+                    
+                    # Collect detailed information
+                    detailed_info = self.report_collector.collect_success_details(
+                        table_name=table_name,
+                        schema_name=processing_config.get('target_schema', 'ref'),
+                        csv_file_path=processing_config['csv_file_path'],
+                        processing_config=processing_config,
+                        result=result
+                    )
+                    
+                    report_path = self.pdf_generator.generate_success_report(
+                        workflow_id=workflow_id,
+                        processing_config=processing_config,
+                        result=result,
+                        output_dir=file_config['processed_location'],
+                        detailed_info=detailed_info
+                    )
+                    self.logger.info(f"Generated detailed success report: {report_path}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to generate success report: {str(e)}")
+
                 # Move files to processed directory
-                self.move_processed_files(processing_config['csv_file_path'], excel_path)
+                self.move_processed_files(processing_config['csv_file_path'], excel_path, report_path)
 
             else:
                 error_message = result.get('error', 'Unknown processing error')
@@ -209,12 +239,58 @@ class ExcelApprovalMonitor:
                     processing_completed_at=datetime.now()
                 )
 
+                # Generate error PDF report with detailed information
+                report_path = None
+                try:
+                    # Collect detailed error information
+                    detailed_error_info = self.report_collector.collect_error_details(
+                        error_message=error_message,
+                        processing_config=processing_config
+                    )
+                    
+                    report_path = self.pdf_generator.generate_error_report(
+                        workflow_id=workflow_id,
+                        processing_config=processing_config,
+                        error_message=error_message,
+                        result=result,
+                        detailed_error_info=detailed_error_info
+                    )
+                    self.logger.info(f"Generated detailed error report: {report_path}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to generate error report: {str(e)}")
+
                 # Move files to error directory
-                self.move_error_files(processing_config['csv_file_path'], excel_path, error_message)
+                self.move_error_files(processing_config['csv_file_path'], excel_path, error_message, report_path)
 
         except Exception as e:
             error_msg = f"Failed to process approved Excel for workflow {workflow_id}: {str(e)}"
             self.logger.error(error_msg)
+
+            # Generate error PDF report for exception
+            report_path = None
+            try:
+                # Collect detailed error information including exception
+                detailed_error_info = self.report_collector.collect_error_details(
+                    error_message=error_msg,
+                    processing_config=processing_config,
+                    exception=e
+                )
+                
+                report_path = self.pdf_generator.generate_error_report(
+                    workflow_id=workflow_id,
+                    processing_config=processing_config,
+                    error_message=error_msg,
+                    detailed_error_info=detailed_error_info
+                )
+                self.logger.info(f"Generated detailed exception error report: {report_path}")
+            except Exception as report_e:
+                self.logger.warning(f"Failed to generate exception error report: {str(report_e)}")
+
+            # Move files to error directory
+            try:
+                self.move_error_files(processing_config['csv_file_path'], excel_path, error_msg, report_path)
+            except Exception as move_e:
+                self.logger.warning(f"Failed to move error files: {str(move_e)}")
 
             # Update workflow to error state
             try:
@@ -284,56 +360,92 @@ class ExcelApprovalMonitor:
         except Exception as e:
             self.logger.error(f"Error during cleanup: {str(e)}")
 
-    def move_processed_files(self, csv_path: str, excel_path: str):
-        """Move successfully processed files to processed directory"""
+    def move_processed_files(self, csv_path: str, excel_path: str, pdf_path: str = None):
+        """Move successfully processed files to processed directory with timestamp"""
         try:
+            from utils.config_loader import config
+            file_config = config.get_file_config()
+            processed_dir = Path(file_config['processed_location'])
+            processed_dir.mkdir(parents=True, exist_ok=True)
+
+            # Generate timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            # Process CSV file
             csv_file = Path(csv_path)
-            excel_file = Path(excel_path)
-
-            processed_dir = csv_file.parent / "processed"
-            processed_dir.mkdir(exist_ok=True)
-
-            # Move both files
-            csv_processed_path = processed_dir / csv_file.name
-            excel_processed_path = processed_dir / excel_file.name
-
             if csv_file.exists():
+                csv_stem = csv_file.stem
+                csv_suffix = csv_file.suffix
+                csv_processed_name = f"{csv_stem}_{timestamp}{csv_suffix}"
+                csv_processed_path = processed_dir / csv_processed_name
                 csv_file.rename(csv_processed_path)
+
+            # Process Excel file
+            excel_file = Path(excel_path)
             if excel_file.exists():
+                excel_stem = excel_file.stem
+                excel_suffix = excel_file.suffix
+                excel_processed_name = f"{excel_stem}_{timestamp}{excel_suffix}"
+                excel_processed_path = processed_dir / excel_processed_name
                 excel_file.rename(excel_processed_path)
 
-            self.logger.info(f"Moved processed files to: {processed_dir}")
+            # Process PDF file if provided (PDF already has timestamp, just move it)
+            if pdf_path:
+                pdf_file = Path(pdf_path)
+                if pdf_file.exists():
+                    pdf_processed_path = processed_dir / pdf_file.name
+                    pdf_file.rename(pdf_processed_path)
+
+            self.logger.info(f"Moved processed files with timestamp {timestamp} to: {processed_dir}")
 
         except Exception as e:
             self.logger.error(f"Failed to move processed files: {str(e)}")
 
-    def move_error_files(self, csv_path: str, excel_path: str, error_message: str):
-        """Move failed files to error directory"""
+    def move_error_files(self, csv_path: str, excel_path: str, error_message: str, pdf_path: str = None):
+        """Move failed files to error directory with timestamp"""
         try:
+            from utils.config_loader import config
+            file_config = config.get_file_config()
+            error_dir = Path(file_config['error_location'])
+            error_dir.mkdir(parents=True, exist_ok=True)
+
+            # Generate timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            # Process CSV file
             csv_file = Path(csv_path)
-            excel_file = Path(excel_path)
-
-            error_dir = csv_file.parent / "error"
-            error_dir.mkdir(exist_ok=True)
-
-            # Move both files
-            csv_error_path = error_dir / csv_file.name
-            excel_error_path = error_dir / excel_file.name
-
             if csv_file.exists():
+                csv_stem = csv_file.stem
+                csv_suffix = csv_file.suffix
+                csv_error_name = f"{csv_stem}_{timestamp}{csv_suffix}"
+                csv_error_path = error_dir / csv_error_name
                 csv_file.rename(csv_error_path)
+
+            # Process Excel file
+            excel_file = Path(excel_path)
             if excel_file.exists():
+                excel_stem = excel_file.stem
+                excel_suffix = excel_file.suffix
+                excel_error_name = f"{excel_stem}_{timestamp}{excel_suffix}"
+                excel_error_path = error_dir / excel_error_name
                 excel_file.rename(excel_error_path)
 
-            # Create error log file
-            error_log_path = error_dir / f"{csv_file.stem}_error.txt"
+            # Process PDF file if provided (PDF already has timestamp, just move it)
+            if pdf_path:
+                pdf_file = Path(pdf_path)
+                if pdf_file.exists():
+                    pdf_error_path = error_dir / pdf_file.name
+                    pdf_file.rename(pdf_error_path)
+
+            # Create error log file with timestamp
+            error_log_path = error_dir / f"{csv_file.stem}_error_{timestamp}.txt"
             with open(error_log_path, 'w') as f:
                 f.write(f"Processing Error: {datetime.now().isoformat()}\n")
                 f.write(f"CSV File: {csv_file.name}\n")
                 f.write(f"Excel File: {excel_file.name}\n")
                 f.write(f"Error: {error_message}\n")
 
-            self.logger.info(f"Moved error files to: {error_dir}")
+            self.logger.info(f"Moved error files with timestamp {timestamp} to: {error_dir}")
 
         except Exception as e:
             self.logger.error(f"Failed to move error files: {str(e)}")

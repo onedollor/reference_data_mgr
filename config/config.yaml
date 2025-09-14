@@ -20,10 +20,12 @@ schemas:
 staff_database: "StaffDatabase"
 
 file_handling:
-  temp_location: "/home/lin/test_data/reference_data/temp"
-  archive_location: "/home/lin/test_data/reference_dataarchive"
-  format_location: "/home/lin/test_data/reference_data/format"
-  dropoff_path: "/home/lin/repo/reference_data_mgr/data/reference_data/dropoff"
+  dropoff_path: "/home/lin/repo/reference_data_mgr/data/reference_data"
+  temp_location: "/home/lin/repo/reference_data_mgr/data/reference_data/temp"
+  archive_location: "/home/lin/repo/reference_data_mgr/data/reference_data/archive"
+  format_location: "/home/lin/repo/reference_data_mgr/data/reference_data/format"
+  processed_location: "/home/lin/repo/reference_data_mgr/data/reference_data/processed"
+  error_location: "/home/lin/repo/reference_data_mgr/data/reference_data/error"
   max_upload_size: 20971520
 
 monitor:
