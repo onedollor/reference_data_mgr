@@ -281,9 +281,45 @@ class ExcelFormGenerator:
         ws[f'A{row}'].value = "Mode:"
         ws[f'A{row}'].font = label_font
         mode_cell = ws[f'B{row}']
-        mode_cell.value = "Select Mode"  # Prompt user to select
+
+        # Check if table exists and get default load type from ref_data_loadtype column
+        default_mode = "Select Mode"  # Default prompt
+        try:
+            from .database import DatabaseManager
+            from pathlib import Path
+
+            db_manager = DatabaseManager()
+            csv_file = Path(csv_path)
+            table_name = csv_file.stem.replace('-', '_').replace(' ', '_')
+
+            with db_manager.get_connection() as connection:
+                # Check available schemas to find where table exists
+                available_schemas = db_manager.get_available_schemas(connection)
+                existing_schema = db_manager.get_table_schema(connection, table_name)
+
+                if existing_schema:
+                    # Table exists, try to get ref_data_loadtype column value
+                    cursor = connection.cursor()
+                    cursor.execute(f"""
+                        SELECT TOP 1 ref_data_loadtype
+                        FROM [{existing_schema}].[{table_name}]
+                        WHERE ref_data_loadtype IS NOT NULL
+                    """)
+
+                    result = cursor.fetchone()
+                    if result and result[0]:
+                        ref_data_loadtype = str(result[0]).lower().strip()
+                        if ref_data_loadtype in ['fullload', 'append']:
+                            default_mode = ref_data_loadtype
+
+        except Exception as e:
+            # If anything fails, use default prompt
+            pass
+
+        mode_cell.value = default_mode
         mode_cell.border = border_thin
-        mode_cell.fill = PatternFill(start_color="FFEB3B", end_color="FFEB3B", fill_type="solid")  # Yellow highlight
+        if default_mode == "Select Mode":
+            mode_cell.fill = PatternFill(start_color="FFEB3B", end_color="FFEB3B", fill_type="solid")  # Yellow highlight
 
         # Add processing mode validation with enhanced settings
         mode_validation = DataValidation(type="list", formula1='"fullload,append"', showDropDown=False)
@@ -355,6 +391,7 @@ class ExcelFormGenerator:
         ws[f'A{row}'].font = label_font
         schema_cell = ws[f'B{row}']
         
+        existing_schema = None
         # Get available schemas and prioritize existing table's schema
         try:
             from .database import DatabaseManager
@@ -362,7 +399,11 @@ class ExcelFormGenerator:
             with db_manager.get_connection() as connection:
                 available_schemas = db_manager.get_available_schemas(connection)
                 existing_schema = db_manager.get_table_schema(connection, default_table_name)
-                
+
+                if 'ref' in available_schemas:
+                    available_schemas.remove('ref')
+                    available_schemas.insert(0, 'ref')  # Always prioritize 'ref' schema
+
                 # If table exists in a specific schema, move that schema to first position
                 if existing_schema and existing_schema in available_schemas:
                     available_schemas.remove(existing_schema)
@@ -371,9 +412,7 @@ class ExcelFormGenerator:
                     # If existing schema is not in available list, add it as first option
                     available_schemas.insert(0, existing_schema)
                 
-                # Set the first schema in the list as the default value
-                default_schema = available_schemas[0] if available_schemas else 'ref'
-                schema_cell.value = default_schema
+                schema_cell.value = available_schemas[0]
                 
                 # Create dropdown with available schemas
                 schema_formula = ','.join(f'"{schema}"' for schema in available_schemas)
@@ -383,17 +422,15 @@ class ExcelFormGenerator:
                 
         except Exception as e:
             # Fallback if database connection fails
-            available_schemas = ['ref']
-            default_schema = 'ref'
-            schema_cell.value = default_schema
-            existing_schema = None
+            available_schemas = ['ref','dbo']
+            schema_cell.value = available_schemas[0]
             
         schema_cell.border = border_thin
         
         if existing_schema:
-            ws[f'C{row}'].value = f"Default: {default_schema} (table exists in this schema)"
+            ws[f'C{row}'].value = f"Default: {available_schemas[0]} (table exists in this schema)"
         else:
-            ws[f'C{row}'].value = f"Default: {default_schema} (new table)"
+            ws[f'C{row}'].value = f"Default: {available_schemas[0]} (new table)"
         row += 1
 
         return row

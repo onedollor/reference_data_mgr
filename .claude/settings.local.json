@@ -50,7 +50,8 @@
       "Bash(cat:*)",
       "Bash(./start_simplified_monitor.sh:*)",
       "Bash(./debug_component.sh:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Read(///**)"
     ],
     "deny": []
   },
