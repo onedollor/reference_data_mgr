@@ -3,7 +3,6 @@ Excel Form Generation Utility
 Creates interactive Excel configuration forms with dropdowns, validation, and formatting
 """
 
-import os
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -11,7 +10,7 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Border, Side, Alignment
 from openpyxl.worksheet.datavalidation import DataValidation
-from openpyxl.utils import get_column_letter
+import traceback
 
 from .file_handler import FileHandler
 class ExcelFormGenerator:
@@ -283,7 +282,7 @@ class ExcelFormGenerator:
         mode_cell = ws[f'B{row}']
 
         # Check if table exists and get default load type from ref_data_loadtype column
-        default_mode = "Select Mode"  # Default prompt
+        default_mode = "fullload"  # Default prompt
         try:
             from .database import DatabaseManager
             from pathlib import Path
@@ -313,13 +312,13 @@ class ExcelFormGenerator:
                             default_mode = ref_data_loadtype
 
         except Exception as e:
+            logging.warning(f"Could not determine existing table load type: {str(e)} {traceback.format_exc()}")
             # If anything fails, use default prompt
-            pass
+            default_mode = "fullload"
 
         mode_cell.value = default_mode
         mode_cell.border = border_thin
-        if default_mode == "Select Mode":
-            mode_cell.fill = PatternFill(start_color="FFEB3B", end_color="FFEB3B", fill_type="solid")  # Yellow highlight
+        mode_cell.fill = PatternFill(start_color="FFEB3B", end_color="FFEB3B", fill_type="solid")  # Yellow highlight
 
         # Add processing mode validation with enhanced settings
         mode_validation = DataValidation(type="list", formula1='"fullload,append"', showDropDown=False)
@@ -333,7 +332,11 @@ class ExcelFormGenerator:
         ws.add_data_validation(mode_validation)
         mode_validation.add(mode_cell)
 
-        ws[f'C{row}'].value = "fullload=truncate, append=add"
+        # Set comment based on whether default was found
+        if default_mode in ['fullload', 'append']:
+            ws[f'C{row}'].value = f"Default: {default_mode} (from existing table)"
+        else:
+            ws[f'C{row}'].value = "fullload=truncate, append=add"
         row += 1
 
         # Add explanation row
