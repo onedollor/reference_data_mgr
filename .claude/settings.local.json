@@ -52,7 +52,11 @@
       "Bash(./debug_component.sh:*)",
       "Bash(xargs:*)",
       "Read(///**)",
-      "mcp__spec-workflow__spec-workflow-guide"
+      "mcp__spec-workflow__spec-workflow-guide",
+      "mcp__spec-workflow__spec-list",
+      "mcp__spec-workflow__spec-status",
+      "mcp__spec-workflow__refresh-tasks",
+      "mcp__spec-workflow__create-spec-doc"
     ],
     "deny": []
   },
