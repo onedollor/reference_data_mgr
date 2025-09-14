@@ -110,10 +110,13 @@ pip install -r requirements.txt
 
 ### Core Dependencies
 - `pandas` - Data processing and CSV handling
-- `pyodbc` - SQL Server database connectivity  
-- `reportlab` - PDF form generation
-- `PyPDF2` - PDF form processing
-- `python-dotenv` - Environment configuration
+- `pyodbc` - SQL Server database connectivity
+- `openpyxl` - Excel form generation and processing
+- `fastapi` - Web framework for API endpoints
+- `PyYAML` - Configuration file handling
+- `chardet` - Character encoding detection
+- `aiofiles` - Asynchronous file operations
+- `reportlab` - PDF report generation
 
 ### Database Setup
 
