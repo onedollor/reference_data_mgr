@@ -1,2 +1,0 @@
-This is a text file that should be ignored by the monitor.
-It contains some data but is not a CSV file.
