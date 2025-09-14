@@ -1,6 +1,6 @@
 # Reference Data Management System
 
-An enterprise-grade automated solution for CSV file processing with intelligent format detection, interactive PDF approval workflow, and comprehensive audit trails.
+An enterprise-grade automated solution for CSV file processing with intelligent format detection, interactive Excel approval workflow, and comprehensive audit trails.
 
 ## 🚀 Quick Start
 
@@ -13,9 +13,9 @@ An enterprise-grade automated solution for CSV file processing with intelligent 
 Place CSV files in: `data/reference_data/dropoff/`
 
 ### Approve Processing
-1. PDF forms are generated automatically
-2. Review and modify the PDF configuration form
-3. Check the final confirmation box and save the PDF
+1. Excel forms are generated automatically
+2. Review and modify the Excel configuration form
+3. Check the final confirmation box and save the Excel file
 4. Processing begins automatically
 
 ### Check Status
@@ -44,14 +44,14 @@ The Reference Data Management System now features a **Simplified Dropoff System*
 **Key Features:**
 - **Single Dropoff Directory** - No complex subfolder structures
 - **Automatic CSV Analysis** - Intelligent format detection (delimiters, encoding, headers)
-- **Interactive PDF Forms** - Review and modify processing settings
+- **Interactive Excel Forms** - Review and modify processing settings
 - **Human Approval Workflow** - Explicit confirmation required before processing
 - **Complete Audit Trail** - Full tracking of all workflow steps
 - **Backward Compatibility** - Uses existing processing engine
 
 **Processing Flow:**
 ```
-CSV File → Format Detection → PDF Form Generation → User Review → Approval → Processing → Archive
+CSV File → Format Detection → Excel Form Generation → User Review → Approval → Processing → Archive
 ```
 
 ### Legacy System
@@ -64,7 +64,7 @@ The original automated system with subfolder-based processing is still available
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   CSV File      │───▶│  Format          │───▶│  PDF Form       │
+│   CSV File      │───▶│  Format          │───▶│  Excel Form     │
 │   Dropoff       │    │  Detection       │    │  Generation     │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
                                                         │
@@ -77,15 +77,15 @@ The original automated system with subfolder-based processing is still available
 ### Core Components
 
 - **SimplifiedFileMonitor** - Monitors single dropoff directory
-- **PDFFormGenerator** - Creates interactive PDF configuration forms
-- **PDFApprovalMonitor** - Watches for approved PDFs and triggers processing
+- **ExcelFormGenerator** - Creates interactive Excel configuration forms
+- **ExcelApprovalMonitor** - Watches for approved Excel files and triggers processing
 - **WorkflowManager** - Orchestrates workflow states and database tracking
-- **PDFProcessor** - Validates and extracts configuration from completed forms
+- **ExcelProcessor** - Validates and extracts configuration from completed forms
 
 ### Database Schema
 
-- **ref.PDF_Workflow_Tracking** - Workflow state and audit trail
-- **ref.PDF_Processing_Stats** - Performance metrics and statistics
+- **ref.Excel_Workflow_Tracking** - Workflow state and audit trail
+- **ref.Excel_Processing_Stats** - Performance metrics and statistics
 - **ref.File_Monitor_Tracking** - Legacy file processing tracking (preserved)
 
 ## 🛠️ Installation
@@ -120,7 +120,7 @@ pip install -r requirements.txt
 1. **Create Database Schema:**
    ```bash
    # Execute the database schema creation
-   sqlcmd -S your_server -d your_database -i sql/pdf_workflow_schema.sql
+   sqlcmd -S your_server -d your_database -i sql/excel_workflow_schema.sql
    ```
 
 2. **Configure Connection:**
@@ -154,9 +154,9 @@ data/reference_data/dropoff/
    data/reference_data/dropoff/
    ```
 
-3. **Review PDF Forms:**
-   - PDF forms are generated automatically with detected settings
-   - Open the PDF form (same name as CSV with `_config.pdf` suffix)
+3. **Review Excel Forms:**
+   - Excel forms are generated automatically with detected settings
+   - Open the Excel form (same name as CSV with `_config.xlsx` suffix)
    - Review and modify settings as needed:
      - CSV format settings (delimiter, encoding, headers)
      - Processing mode (fullload or append)
@@ -165,11 +165,11 @@ data/reference_data/dropoff/
 
 4. **Approve Processing:**
    - Check the final confirmation checkbox
-   - Fill in "Processed By" and "Date/Time" fields  
-   - Save the PDF file
+   - Fill in "Processed By" and "Date/Time" fields
+   - Save the Excel file
    - Processing begins automatically within 30 seconds
 
-### PDF Form Fields
+### Excel Form Fields
 
 **CSV Format Settings:**
 - **Delimiter:** Character separating CSV columns (`,`, `;`, `|`, `\t`)
@@ -224,7 +224,7 @@ STABILITY_CHECKS=6
 
 # Processing Configuration
 MAX_CONCURRENT_PROCESSING=3
-PDF_CHECK_INTERVAL=30
+EXCEL_CHECK_INTERVAL=30
 CLEANUP_DAYS=7
 ```
 
@@ -234,9 +234,9 @@ CLEANUP_DAYS=7
 - `MONITOR_INTERVAL`: Seconds between directory scans (default: 15)
 - `STABILITY_CHECKS`: File stability verification cycles (default: 6)
 
-**PDF Approval Settings:**
-- `APPROVAL_CHECK_INTERVAL`: Seconds between PDF approval checks (default: 30)
-- `PDF_MODIFICATION_CHECK_INTERVAL`: PDF file modification check frequency (default: 60)
+**Excel Approval Settings:**
+- `APPROVAL_CHECK_INTERVAL`: Seconds between Excel approval checks (default: 30)
+- `EXCEL_MODIFICATION_CHECK_INTERVAL`: Excel file modification check frequency (default: 60)
 - `MAX_CONCURRENT_PROCESSING`: Maximum simultaneous file processing (default: 3)
 
 ## 📊 Monitoring & Logs
@@ -244,7 +244,7 @@ CLEANUP_DAYS=7
 ### Log Files
 
 - **File Monitor:** `logs/simplified_file_monitor.log`
-- **Approval Monitor:** `logs/pdf_approval_monitor.log` 
+- **Approval Monitor:** `logs/excel_approval_monitor.log`
 - **Startup System:** `logs/simplified_system_startup.log`
 
 ### Monitoring Commands
@@ -255,22 +255,22 @@ CLEANUP_DAYS=7
 
 # Monitor live logs
 tail -f logs/simplified_file_monitor.log
-tail -f logs/pdf_approval_monitor.log
+tail -f logs/excel_approval_monitor.log
 
 # Check workflow status in database
-SELECT status, COUNT(*) as count 
-FROM ref.PDF_Workflow_Tracking 
+SELECT status, COUNT(*) as count
+FROM ref.Excel_Workflow_Tracking
 GROUP BY status;
 
 # View processing statistics
-SELECT * FROM ref.VW_PDF_Workflow_Summary 
+SELECT * FROM ref.VW_Excel_Workflow_Summary
 ORDER BY created_at DESC;
 ```
 
 ### Performance Metrics
 
-- **File Detection:** <15 seconds from dropoff to PDF generation
-- **PDF Generation:** <30 seconds for form creation
+- **File Detection:** <15 seconds from dropoff to Excel generation
+- **Excel Generation:** <30 seconds for form creation
 - **Processing Throughput:** >1,000 rows/second (inherited from existing engine)
 - **Memory Usage:** <512MB per 100MB file processed
 
@@ -284,12 +284,12 @@ python3 run_tests.py
 ### Test Categories
 
 **Unit Tests:**
-- PDF form generation and processing
+- Excel form generation and processing
 - Workflow state management
 - Configuration validation
 - Error handling
 
-**Integration Tests:**  
+**Integration Tests:**
 - End-to-end workflow simulation
 - Component interaction testing
 - Database operations
@@ -297,7 +297,7 @@ python3 run_tests.py
 
 **Performance Tests:**
 - CSV detection performance (10k+ rows)
-- PDF generation timing
+- Excel generation timing
 - Concurrent workflow handling
 - Database operation efficiency
 
@@ -318,16 +318,16 @@ python3 run_tests.py --check-deps
 
 ### Common Issues
 
-**PDF Generation Fails:**
+**Excel Generation Fails:**
 ```
-Error: Failed to generate PDF form
-Solution: Install reportlab: pip install reportlab
+Error: Failed to generate Excel form
+Solution: Install openpyxl: pip install openpyxl
 ```
 
-**PDF Processing Errors:**
+**Excel Processing Errors:**
 ```
-Error: Cannot extract PDF configuration  
-Solution: Install PyPDF2: pip install PyPDF2
+Error: Cannot extract Excel configuration
+Solution: Install openpyxl: pip install openpyxl
 ```
 
 **Database Connection Issues:**
@@ -339,7 +339,7 @@ Solution: Check .env file and database credentials
 
 **File Not Processing:**
 ```
-Issue: CSV file detected but no PDF generated
+Issue: CSV file detected but no Excel generated
 Check: File permissions and stability
        Monitor logs for error messages
 ```
@@ -365,8 +365,8 @@ python3 run_tests.py --check-deps
 **Restart Failed Workflows:**
 ```sql
 -- Reset failed workflows to retry
-UPDATE ref.PDF_Workflow_Tracking 
-SET status = 'pending_pdf', retry_count = retry_count + 1
+UPDATE ref.Excel_Workflow_Tracking
+SET status = 'pending_excel', retry_count = retry_count + 1
 WHERE status = 'error' AND retry_count < 3;
 ```
 
@@ -396,18 +396,18 @@ print(result)
 reference_data_mgr/
 ├── backend/                    # Core application
 │   ├── simplified_file_monitor.py      # New file monitoring
-│   ├── pdf_approval_monitor.py         # PDF approval monitoring  
+│   ├── excel_approval_monitor.py       # Excel approval monitoring
 │   ├── backend_lib.py                  # Existing processing API
 │   ├── file_monitor.py                 # Legacy file monitoring
 │   └── utils/                          # Utility modules
-│       ├── pdf_generator.py            # PDF form generation
-│       ├── pdf_processor.py            # PDF form processing
+│       ├── excel_generator.py          # Excel form generation
+│       ├── excel_processor.py          # Excel form processing
 │       ├── workflow_manager.py         # Workflow orchestration
 │       ├── csv_detector.py             # CSV format detection
 │       ├── database.py                 # Database management
 │       └── logger.py                   # Logging utilities
 ├── sql/                        # Database schemas
-│   └── pdf_workflow_schema.sql         # Workflow tracking tables
+│   └── excel_workflow_schema.sql       # Workflow tracking tables
 ├── logs/                       # Application logs
 ├── data/reference_data/dropoff/        # File dropoff locations
 └── tests/                      # Test suites
@@ -422,13 +422,13 @@ reference_data_mgr/
    - Include unit tests
 
 2. **Database Changes:**
-   - Update `sql/pdf_workflow_schema.sql`
+   - Update `sql/excel_workflow_schema.sql`
    - Add migration scripts for existing deployments
    - Update workflow manager for schema changes
 
-3. **PDF Form Modifications:**
-   - Extend `PDFFormGenerator` for new form fields
-   - Update `PDFProcessor` for new validation rules
+3. **Excel Form Modifications:**
+   - Extend `ExcelFormGenerator` for new form fields
+   - Update `ExcelProcessor` for new validation rules
    - Add corresponding test cases
 
 ### Code Style
@@ -460,11 +460,11 @@ For issues, questions, or feature requests:
 **System Requirements:**
 - Python 3.12+
 - SQL Server 2017+
-- reportlab and PyPDF2 packages
+- openpyxl and pandas packages
 - Appropriate file system permissions
 
 **Performance Expectations:**
 - File detection: <15 seconds
-- PDF generation: <30 seconds  
+- Excel generation: <30 seconds
 - Processing: >1,000 rows/second
 - Memory usage: <512MB per 100MB file
