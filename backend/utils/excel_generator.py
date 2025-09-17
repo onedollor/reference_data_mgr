@@ -62,7 +62,7 @@ class ExcelFormGenerator:
         # Create workbook and worksheet
         wb = Workbook()
         ws = wb.active
-        ws.title = "CSV Processing Config"
+        ws.title = "csv_proc_cfg"
 
         # Set column widths
         ws.column_dimensions['A'].width = 25

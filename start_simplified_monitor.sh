@@ -10,6 +10,10 @@ BACKEND_DIR="$SCRIPT_DIR/backend"
 LOG_DIR="$SCRIPT_DIR/logs"
 PID_DIR="$SCRIPT_DIR/pids"
 
+# Config file and environment parameters
+CONFIG_FILE=""
+ENVIRONMENT=""
+
 # Process names and scripts
 FILE_MONITOR_SCRIPT="$BACKEND_DIR/simplified_file_monitor.py"
 APPROVAL_MONITOR_SCRIPT="$BACKEND_DIR/excel_approval_monitor.py"
@@ -128,7 +132,19 @@ start_monitor() {
     
     # Start the process in background
     cd "$BACKEND_DIR"
-    nohup python3 "$script" > "$log_file" 2>&1 &
+    local cmd_args=""
+    if [[ -n "$CONFIG_FILE" ]]; then
+        cmd_args="$cmd_args --config \"$CONFIG_FILE\""
+    fi
+    if [[ -n "$ENVIRONMENT" ]]; then
+        cmd_args="$cmd_args --env \"$ENVIRONMENT\""
+    fi
+
+    if [[ -n "$cmd_args" ]]; then
+        nohup python3 "$script" $cmd_args > "$log_file" 2>&1 &
+    else
+        nohup python3 "$script" > "$log_file" 2>&1 &
+    fi
     local pid=$!
     
     # Save PID
@@ -284,24 +300,79 @@ show_logs() {
 
 # Show usage
 show_usage() {
-    echo "Usage: $0 {start|stop|restart|status|logs}"
+    echo "Usage: $0 [--config CONFIG_FILE] [--env ENVIRONMENT] {start|stop|restart|status|logs}"
+    echo ""
+    echo "Options:"
+    echo "  --config CONFIG_FILE  - Use custom config file path"
+    echo "  --env ENVIRONMENT     - Use environment config (dev/sit/prd)"
     echo ""
     echo "Commands:"
     echo "  start    - Start the simplified dropoff system"
-    echo "  stop     - Stop the simplified dropoff system"  
+    echo "  stop     - Stop the simplified dropoff system"
     echo "  restart  - Restart the simplified dropoff system"
     echo "  status   - Show current system status"
     echo "  logs     - Show recent log entries"
     echo ""
-    echo "Example:"
-    echo "  $0 start    # Start the system"
-    echo "  $0 status   # Check if running"
-    echo "  $0 logs     # View recent activity"
+    echo "Examples:"
+    echo "  $0 start                                    # Start with default config"
+    echo "  $0 --env dev start                         # Start with dev environment"
+    echo "  $0 --env sit restart                       # Restart with sit environment"
+    echo "  $0 --env prd status                        # Check status with prd environment"
+    echo "  $0 --config config/custom.yaml start       # Start with custom config file"
+    echo "  $0 logs                                     # View recent activity"
+}
+
+# Parse command line arguments
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --config)
+                if [[ -n "$2" ]]; then
+                    CONFIG_FILE="$2"
+                    shift 2
+                else
+                    echo "Error: --config requires a file path"
+                    show_usage
+                    exit 1
+                fi
+                ;;
+            --env)
+                if [[ -n "$2" ]]; then
+                    ENVIRONMENT="$2"
+                    shift 2
+                else
+                    echo "Error: --env requires an environment (dev/sit/prd)"
+                    show_usage
+                    exit 1
+                fi
+                ;;
+            start|stop|restart|status|logs)
+                COMMAND="$1"
+                shift
+                if [[ "$COMMAND" == "logs" && -n "$1" ]]; then
+                    LOG_LINES="$1"
+                    shift
+                fi
+                ;;
+            *)
+                echo "Unknown option: $1"
+                show_usage
+                exit 1
+                ;;
+        esac
+    done
 }
 
 # Main script logic
 main() {
-    case "$1" in
+    parse_args "$@"
+
+    if [[ -z "$COMMAND" ]]; then
+        show_usage
+        exit 1
+    fi
+
+    case "$COMMAND" in
         start)
             start_all
             ;;
@@ -315,7 +386,7 @@ main() {
             get_status
             ;;
         logs)
-            show_logs "${2:-50}"
+            show_logs "${LOG_LINES:-50}"
             ;;
         *)
             show_usage
