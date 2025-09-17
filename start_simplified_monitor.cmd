@@ -11,6 +11,10 @@ set BACKEND_DIR=%SCRIPT_DIR%\backend
 set LOG_DIR=%SCRIPT_DIR%\logs
 set PID_DIR=%SCRIPT_DIR%\pids
 
+REM Config file and environment parameters
+set CONFIG_FILE=
+set ENVIRONMENT=
+
 REM Process names and scripts
 set FILE_MONITOR_SCRIPT=%BACKEND_DIR%\simplified_file_monitor.py
 set APPROVAL_MONITOR_SCRIPT=%BACKEND_DIR%\excel_approval_monitor.py
@@ -30,13 +34,57 @@ REM Initialize logging
 call :log "=== Simplified Reference Data System Startup Script ==="
 call :log "Command: %~nx0 %*"
 
+REM Parse command line arguments
+set COMMAND=
+set LOG_LINES=50
+
+:parse_args
+if "%1"=="" goto check_command
+if "%1"=="--config" (
+    if "%2"=="" (
+        echo Error: --config requires a file path
+        goto show_usage
+    )
+    set CONFIG_FILE=%2
+    shift
+    shift
+    goto parse_args
+)
+if "%1"=="--env" (
+    if "%2"=="" (
+        echo Error: --env requires an environment (dev/sit/prd)
+        goto show_usage
+    )
+    set ENVIRONMENT=%2
+    shift
+    shift
+    goto parse_args
+)
+if "%1"=="start" set COMMAND=start && shift && goto parse_args
+if "%1"=="stop" set COMMAND=stop && shift && goto parse_args
+if "%1"=="restart" set COMMAND=restart && shift && goto parse_args
+if "%1"=="status" set COMMAND=status && shift && goto parse_args
+if "%1"=="logs" (
+    set COMMAND=logs
+    shift
+    if not "%1"=="" (
+        set LOG_LINES=%1
+        shift
+    )
+    goto parse_args
+)
+echo Unknown option: %1
+goto show_usage
+
+:check_command
+if "%COMMAND%"=="" goto show_usage
+
 REM Main script logic
-if "%1"=="" goto show_usage
-if "%1"=="start" goto start_all
-if "%1"=="stop" goto stop_all
-if "%1"=="restart" goto restart_all
-if "%1"=="status" goto get_status
-if "%1"=="logs" goto show_logs
+if "%COMMAND%"=="start" goto start_all
+if "%COMMAND%"=="stop" goto stop_all
+if "%COMMAND%"=="restart" goto restart_all
+if "%COMMAND%"=="status" goto get_status
+if "%COMMAND%"=="logs" goto show_logs
 goto show_usage
 
 :start_all
@@ -123,12 +171,9 @@ echo Dropoff Directory: %SCRIPT_DIR%\data\reference_data\dropoff
 goto :eof
 
 :show_logs
-set lines=%2
-if "%lines%"=="" set lines=50
-
 echo === Recent File Monitor Log Entries ===
 if exist "%FILE_MONITOR_LOG%" (
-    powershell -command "Get-Content '%FILE_MONITOR_LOG%' -Tail %lines%"
+    powershell -command "Get-Content '%FILE_MONITOR_LOG%' -Tail %LOG_LINES%"
 ) else (
     echo Log file not found: %FILE_MONITOR_LOG%
 )
@@ -136,14 +181,18 @@ if exist "%FILE_MONITOR_LOG%" (
 echo.
 echo === Recent Approval Monitor Log Entries ===
 if exist "%APPROVAL_MONITOR_LOG%" (
-    powershell -command "Get-Content '%APPROVAL_MONITOR_LOG%' -Tail %lines%"
+    powershell -command "Get-Content '%APPROVAL_MONITOR_LOG%' -Tail %LOG_LINES%"
 ) else (
     echo Log file not found: %APPROVAL_MONITOR_LOG%
 )
 goto :eof
 
 :show_usage
-echo Usage: %~nx0 {start^|stop^|restart^|status^|logs}
+echo Usage: %~nx0 [--config CONFIG_FILE] [--env ENVIRONMENT] {start^|stop^|restart^|status^|logs}
+echo.
+echo Options:
+echo   --config CONFIG_FILE  - Use custom config file path
+echo   --env ENVIRONMENT     - Use environment config (dev/sit/prd)
 echo.
 echo Commands:
 echo   start    - Start the simplified dropoff system
@@ -152,10 +201,13 @@ echo   restart  - Restart the simplified dropoff system
 echo   status   - Show current system status
 echo   logs     - Show recent log entries
 echo.
-echo Example:
-echo   %~nx0 start    # Start the system
-echo   %~nx0 status   # Check if running
-echo   %~nx0 logs     # View recent activity
+echo Examples:
+echo   %~nx0 start                                    # Start with default config
+echo   %~nx0 --env dev start                         # Start with dev environment
+echo   %~nx0 --env sit restart                       # Restart with sit environment
+echo   %~nx0 --env prd status                        # Check status with prd environment
+echo   %~nx0 --config config\custom.yaml start       # Start with custom config file
+echo   %~nx0 logs                                     # View recent activity
 goto :eof
 
 :setup_directories
@@ -231,7 +283,19 @@ if !errorlevel! equ 0 (
 
 REM Start the process in background
 cd /d "%BACKEND_DIR%"
-start /b python "%script%" >"%log_file%" 2>&1
+set cmd_args=
+if not "%CONFIG_FILE%"=="" (
+    set cmd_args=!cmd_args! --config "%CONFIG_FILE%"
+)
+if not "%ENVIRONMENT%"=="" (
+    set cmd_args=!cmd_args! --env "%ENVIRONMENT%"
+)
+
+if not "!cmd_args!"=="" (
+    start /b python "%script%" !cmd_args! >"%log_file%" 2>&1
+) else (
+    start /b python "%script%" >"%log_file%" 2>&1
+)
 set pid=!errorlevel!
 
 REM Get the actual PID (this is a limitation of Windows batch - we'll use a workaround)

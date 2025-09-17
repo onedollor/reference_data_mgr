@@ -3,125 +3,97 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+# Global environment variable
+ENVIRONMENT: Optional[str] = None
+
+def set_environment(env: str) -> None:
+    """Set the global environment (dev/sit/prd)"""
+    global ENVIRONMENT
+    ENVIRONMENT = env.lower() if env else None
+
+def get_environment() -> Optional[str]:
+    """Get the current environment"""
+    return ENVIRONMENT
+
 class ConfigLoader:
-    """YAML configuration loader with environment variable support"""
-    
-    _instance: Optional['ConfigLoader'] = None
-    _config: Optional[Dict[str, Any]] = None
-    
-    def __new__(cls) -> 'ConfigLoader':
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-    
-    def __init__(self):
-        if self._config is None:
-            self._load_config()
-    
-    def _load_config(self) -> None:
+    """YAML configuration loader"""
+
+    _instances: Dict[str, 'ConfigLoader'] = {}
+
+    def __new__(cls, config_file: Optional[str] = None) -> 'ConfigLoader':
+        # Use default config path if none provided
+        if config_file is None:
+            base_path = Path(__file__).parent.parent.parent / "config"
+            if ENVIRONMENT:
+                # Use environment-specific config if available
+                env_config = base_path / f"{ENVIRONMENT}.yaml"
+                if env_config.exists():
+                    config_file = str(env_config)
+                else:
+                    config_file = str(base_path / "config.yaml")
+            else:
+                config_file = str(base_path / "config.yaml")
+
+        # Normalize the path to avoid duplicates
+        config_file = str(Path(config_file).resolve())
+
+        # Return existing instance for this config file, or create new one
+        if config_file not in cls._instances:
+            instance = super().__new__(cls)
+            cls._instances[config_file] = instance
+            instance._initialized = False
+
+        return cls._instances[config_file]
+
+    def __init__(self, config_file: Optional[str] = None):
+        # Only initialize once per instance
+        if hasattr(self, '_initialized') and self._initialized:
+            return
+
+        self._config: Optional[Dict[str, Any]] = None
+        self._config_file: Optional[str] = None
+        self._load_config(config_file)
+        self._initialized = True
+
+    def _load_config(self, config_file: Optional[str] = None) -> None:
         """Load configuration from YAML file"""
-        config_path = Path(__file__).parent.parent.parent / "config" / "config.yaml"
-        
+        if config_file:
+            config_path = Path(config_file)
+            self._config_file = config_file
+        else:
+            config_path = Path(__file__).parent.parent.parent / "config" / "config.yaml"
+            self._config_file = str(config_path)
+
+        # Normalize the path
+        config_path = config_path.resolve()
+        self._config_file = str(config_path)
+
         if not config_path.exists():
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
-        
+
         with open(config_path, 'r', encoding='utf-8') as file:
             self._config = yaml.safe_load(file)
     
     def get(self, key: str, default: Any = None, section: Optional[str] = None) -> Any:
         """
-        Get configuration value with optional environment variable override
-        
+        Get configuration value from YAML file
+
         Args:
             key: Configuration key
             default: Default value if not found
             section: Configuration section (e.g., 'database', 'logging')
-            
+
         Returns:
-            Configuration value, environment variable value, or default
+            Configuration value or default
         """
-        # Check environment variable first (using original env var names)
-        env_mappings = {
-            # Logging
-            'timezone': 'LOG_TIMEZONE',
-            
-            # Database
-            'host': 'db_host',
-            'name': 'db_name', 
-            'user': 'db_user',
-            'password': 'db_password',
-            'odbc_driver': 'db_odbc_driver',
-            'pool_size': 'DB_POOL_SIZE',
-            'max_retries': 'DB_MAX_RETRIES',
-            'retry_backoff': 'DB_RETRY_BACKOFF',
-            
-            # Schemas
-            'data_schema': 'data_schema',
-            'backup_schema': 'backup_schema',
-            'validation_sp_schema': 'validation_sp_schema',
-            'staff_database': 'staff_database',
-            
-            # File handling
-            'temp_location': 'temp_location',
-            'archive_location': 'archive_location',
-            'format_location': 'format_location',
-            'dropoff_path': 'SIMPLIFIED_DROPOFF_PATH',
-            'max_upload_size': 'max_upload_size',
-            
-            # Ingest
-            'progress_interval': 'INGEST_PROGRESS_INTERVAL',
-            'type_inference': 'INGEST_TYPE_INFERENCE',
-            'type_sample_rows': 'INGEST_TYPE_SAMPLE_ROWS',
-            'date_threshold': 'INGEST_DATE_THRESHOLD',
-            'batch_size': 'INGEST_BATCH_SIZE',
-            'slow_progress_demo': 'DEMO_SLOW_PROGRESS',
-            'persist_schema': 'INGEST_PERSIST_SCHEMA',
-            
-            # Debug
-            'enabled': 'DEBUG',
-            
-            # Monitor
-            'interval': 'MONITOR_INTERVAL',
-            'stability_checks': 'STABILITY_CHECKS',
-            'log_file': 'LOG_FILE'
-        }
-        
-        env_var = env_mappings.get(key)
-        if env_var:
-            env_value = os.getenv(env_var)
-            if env_value is not None:
-                # Convert string values to appropriate types
-                return self._convert_type(env_value, key)
-        
         # Get from YAML config
         if section and self._config and section in self._config:
             return self._config[section].get(key, default)
         elif self._config:
             return self._config.get(key, default)
-        
+
         return default
     
-    def _convert_type(self, value: str, key: str) -> Any:
-        """Convert string environment variable to appropriate type"""
-        # Boolean conversions
-        if key in ['type_inference', 'slow_progress_demo', 'persist_schema', 'enabled']:
-            return value.lower() in ('1', 'true', 'yes', 'on')
-        
-        # Integer conversions
-        if key in ['pool_size', 'max_retries', 'progress_interval', 'type_sample_rows', 'batch_size', 'max_upload_size', 'interval', 'stability_checks']:
-            try:
-                return int(value)
-            except ValueError:
-                return value
-        
-        # Float conversions
-        if key in ['retry_backoff', 'date_threshold']:
-            try:
-                return float(value)
-            except ValueError:
-                return value
-        
-        return value
     
     def get_database_config(self) -> Dict[str, Any]:
         """Get database configuration section"""
@@ -174,3 +146,14 @@ class ConfigLoader:
 
 # Singleton instance
 config = ConfigLoader()
+
+def get_config(config_file: Optional[str] = None) -> ConfigLoader:
+    """Get ConfigLoader instance with optional config file"""
+    return ConfigLoader(config_file)
+
+def get_config_by_env(env: Optional[str] = None) -> ConfigLoader:
+    """Get ConfigLoader instance for specific environment"""
+    if env:
+        config_file = str(Path(__file__).parent.parent.parent / "config" / f"{env.lower()}.yaml")
+        return ConfigLoader(config_file)
+    return ConfigLoader()

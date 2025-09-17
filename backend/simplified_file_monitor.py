@@ -9,6 +9,7 @@ import sys
 import time
 import hashlib
 import logging
+import argparse
 from datetime import datetime
 from pathlib import Path
 import csv
@@ -21,15 +22,14 @@ from utils.workflow_manager import WorkflowManager
 from utils.excel_generator import ExcelFormGenerator
 from utils.csv_detector import CSVFormatDetector
 
-# Configuration - Load from YAML config
-from utils.config_loader import config
-file_config = config.get_file_config()
-monitor_config = config.get_monitor_config()
+# Configuration will be loaded in main() based on command line args
+from utils.config_loader import get_config
 
-SIMPLIFIED_DROPOFF_PATH = file_config['dropoff_path']
-MONITOR_INTERVAL = monitor_config['interval']
-STABILITY_CHECKS = monitor_config['stability_checks']
-LOG_FILE = monitor_config['log_file']
+# Global config variables (set in main)
+SIMPLIFIED_DROPOFF_PATH = None
+MONITOR_INTERVAL = None
+STABILITY_CHECKS = None
+LOG_FILE = None
 
 class SimplifiedFileMonitor:
     """Monitors single dropoff directory and triggers Excel workflow"""
@@ -328,6 +328,42 @@ class SimplifiedFileMonitor:
             self.logger.error(f"Error during tracking cleanup: {str(e)}")
 def main():
     """Main entry point for the simplified file monitor"""
+    global SIMPLIFIED_DROPOFF_PATH, MONITOR_INTERVAL, STABILITY_CHECKS, LOG_FILE
+
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Simplified File Monitor for Reference Data Management')
+    parser.add_argument('--config', help='Config file path (e.g., config/dev.yaml, config/sit.yaml, config/prd.yaml)')
+    parser.add_argument('--env', help='Environment (dev/sit/prd) - will use config/{env}.yaml')
+    args = parser.parse_args()
+
+    # Load configuration
+    try:
+        # Import and set environment if provided
+        from utils.config_loader import set_environment
+        if args.env:
+            set_environment(args.env)
+            print(f"Environment set to: {args.env}")
+
+        config = get_config(args.config)
+        file_config = config.get_file_config()
+        monitor_config = config.get_monitor_config()
+
+        SIMPLIFIED_DROPOFF_PATH = file_config['dropoff_path']
+        MONITOR_INTERVAL = monitor_config['interval']
+        STABILITY_CHECKS = monitor_config['stability_checks']
+        LOG_FILE = monitor_config['log_file']
+
+        if args.env:
+            print(f"Using environment: {args.env} (config/{args.env}.yaml)")
+        elif args.config:
+            print(f"Using config: {args.config}")
+        else:
+            print("Using default config.yaml")
+
+    except Exception as e:
+        print(f"Failed to load configuration: {str(e)}")
+        sys.exit(1)
+
     try:
         monitor = SimplifiedFileMonitor()
         monitor.run()

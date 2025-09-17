@@ -8,6 +8,7 @@ import os
 import sys
 import time
 import logging
+import argparse
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any
@@ -20,10 +21,13 @@ from utils.excel_processor import ExcelProcessor
 from utils.pdf_report_generator import PDFReportGenerator
 from utils.report_data_collector import ReportDataCollector
 
-# Monitor settings
+# Configuration will be loaded in main() based on command line args
+from utils.config_loader import get_config
+
+# Global config variables (set in main)
 APPROVAL_CHECK_INTERVAL = 30  # seconds - check for approvals every 30 seconds
 EXCEL_MODIFICATION_CHECK_INTERVAL = 60  # seconds - check for Excel modifications every minute
-LOG_FILE = "/home/lin/repo/reference_data_mgr/logs/excel_approval_monitor.log"
+LOG_FILE = None
 MAX_CONCURRENT_PROCESSING = 3  # Maximum number of files to process simultaneously
 
 class ExcelApprovalMonitor:
@@ -452,6 +456,37 @@ class ExcelApprovalMonitor:
 
 def main():
     """Main entry point for Excel approval monitor"""
+    global LOG_FILE
+
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Excel Approval Monitor for Simplified Dropoff System')
+    parser.add_argument('--config', help='Config file path (e.g., config/dev.yaml, config/sit.yaml, config/prd.yaml)')
+    parser.add_argument('--env', help='Environment (dev/sit/prd) - will use config/{env}.yaml')
+    args = parser.parse_args()
+
+    # Load configuration
+    try:
+        # Import and set environment if provided
+        from utils.config_loader import set_environment
+        if args.env:
+            set_environment(args.env)
+            print(f"Environment set to: {args.env}")
+
+        config = get_config(args.config)
+        monitor_config = config.get_monitor_config()
+        LOG_FILE = monitor_config['log_file'].replace('simplified_file_monitor.log', 'excel_approval_monitor.log')
+
+        if args.env:
+            print(f"Using environment: {args.env} (config/{args.env}.yaml)")
+        elif args.config:
+            print(f"Using config: {args.config}")
+        else:
+            print("Using default config.yaml")
+
+    except Exception as e:
+        print(f"Failed to load configuration: {str(e)}")
+        sys.exit(1)
+
     try:
         monitor = ExcelApprovalMonitor()
         monitor.run()
